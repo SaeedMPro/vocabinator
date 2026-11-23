@@ -11,6 +11,7 @@ import (
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/googletranslate"
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/sqlite"
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/system"
+	"github.com/SaeedMPro/vocabinator/adapter/platform/selection"
 	"github.com/SaeedMPro/vocabinator/internal/application/port/inbound"
 	"github.com/SaeedMPro/vocabinator/internal/application/port/outbound"
 	"github.com/SaeedMPro/vocabinator/internal/application/usecase"
@@ -23,6 +24,7 @@ type App struct {
 	Vocabulary inbound.VocabularyService
 	SaveWord   inbound.SaveWordService
 	Lookup     inbound.LookupService
+	Selection  inbound.SelectionService
 
 	db *sql.DB
 }
@@ -38,6 +40,7 @@ func (a *App) Close() error {
 type options struct {
 	dictionary outbound.DictionaryProvider
 	translator outbound.TranslationProvider
+	selection  outbound.SelectionProvider
 }
 
 // Option overrides a default adapter, mainly for tests.
@@ -50,6 +53,10 @@ func WithTranslator(p outbound.TranslationProvider) Option {
 	return func(o *options) { o.translator = p }
 }
 
+func WithSelectionProvider(p outbound.SelectionProvider) Option {
+	return func(o *options) { o.selection = p }
+}
+
 // Build opens the database and wires every use case.
 func Build(ctx context.Context, cfg Config, opts ...Option) (*App, error) {
 	var o options
@@ -59,6 +66,9 @@ func Build(ctx context.Context, cfg Config, opts ...Option) (*App, error) {
 
 	if o.dictionary == nil {
 		o.dictionary = freedictionary.New(freedictionary.Config{})
+	}
+	if o.selection == nil {
+		o.selection = selection.New()
 	}
 	if o.translator == nil {
 		if cfg.GoogleAPIKey == "" {
@@ -84,6 +94,7 @@ func Build(ctx context.Context, cfg Config, opts ...Option) (*App, error) {
 		Vocabulary: vocabulary,
 		SaveWord:   usecase.NewSaveWordService(vocabulary),
 		Lookup:     usecase.NewLookupService(o.dictionary, o.translator),
+		Selection:  usecase.NewSelectionService(o.selection),
 		db:         db,
 	}, nil
 }

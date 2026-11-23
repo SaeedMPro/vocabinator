@@ -1,0 +1,6 @@
+dist/
+/vocab
+/vocab.exe
+*.db
+*.db-wal
+*.db-shm

@@ -10,17 +10,23 @@ import (
 
 	"github.com/SaeedMPro/vocabinator/adapter/inbound/cli"
 	"github.com/SaeedMPro/vocabinator/adapter/inbound/web"
+	"github.com/SaeedMPro/vocabinator/adapter/platform/notify"
 	"github.com/SaeedMPro/vocabinator/bootstrap"
 )
+
+// version is set at release time with -ldflags "-X main.version=...".
+var version = "dev"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
 	root := cli.NewRootCmd(cli.Env{
-		Serve:  serve,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
+		Serve:   serve,
+		Version: version,
+		Notify:  notify.New().Notify,
+		Stdout:  os.Stdout,
+		Stderr:  os.Stderr,
 		Open: func(ctx context.Context) (cli.Services, io.Closer, error) {
 			cfg, err := bootstrap.LoadConfig(os.Getenv)
 			if err != nil {
@@ -34,6 +40,7 @@ func main() {
 				Vocabulary:    app.Vocabulary,
 				SaveWord:      app.SaveWord,
 				Lookup:        app.Lookup,
+				Selection:     app.Selection,
 				DefaultSource: cfg.SourceLanguage,
 				DefaultTarget: cfg.TargetLanguage,
 			}, app, nil

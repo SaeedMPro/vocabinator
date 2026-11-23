@@ -13,14 +13,18 @@ import (
 
 func newLookupCmd(env Env) *cobra.Command {
 	var langs langFlags
+	var in inputFlags
 	var formatFlag string
 
 	cmd := &cobra.Command{
-		Use:   "lookup <word>",
+		Use:   "lookup [word]",
 		Short: "Look up a word without saving it",
-		Args:  cobra.MinimumNArgs(1),
+		Long: "Look up a word without saving it. Give the word as an argument, or use " +
+			"--selection to look up the text currently highlighted in any application.",
+		Args: cobra.ArbitraryArgs,
 	}
 	langs.register(cmd)
+	in.register(cmd)
 	cmd.Flags().StringVar(&formatFlag, "format", "text", "output format: text or json")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
@@ -28,18 +32,34 @@ func newLookupCmd(env Env) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if err := in.validate(args); err != nil {
+			return err
+		}
 		return run(env, func(ctx context.Context, svc Services) error {
-			source, target, err := langs.resolve(svc)
-			if err != nil {
-				return err
-			}
-			result, err := svc.Lookup.LookupWord(ctx, inbound.LookupWordInput{
-				Term: termArg(args), SourceLanguage: source, TargetLanguage: target,
+			return in.notifyOnError(ctx, env, func() error {
+				source, target, err := langs.resolve(svc)
+				if err != nil {
+					return err
+				}
+				term, err := in.term(ctx, svc, args)
+				if err != nil {
+					return friendly(err)
+				}
+				result, err := svc.Lookup.LookupWord(ctx, inbound.LookupWordInput{
+					Term: term, SourceLanguage: source, TargetLanguage: target,
+				})
+				if err != nil {
+					return friendly(err)
+				}
+				if err := renderLookup(env.Stdout, f, result); err != nil {
+					return err
+				}
+				if in.notify {
+					title, body := summarizeLookup(result)
+					in.send(ctx, env, title, body)
+				}
+				return nil
 			})
-			if err != nil {
-				return friendly(err)
-			}
-			return renderLookup(env.Stdout, f, result)
 		})(cmd, args)
 	}
 	return cmd
@@ -47,14 +67,18 @@ func newLookupCmd(env Env) *cobra.Command {
 
 func newSaveCmd(env Env) *cobra.Command {
 	var langs langFlags
+	var in inputFlags
 	var formatFlag, contextFlag, urlFlag string
 
 	cmd := &cobra.Command{
-		Use:   "save <word>",
+		Use:   "save [word]",
 		Short: "Save a word, optionally with the context it was seen in",
-		Args:  cobra.MinimumNArgs(1),
+		Long: "Save a word, optionally with the context it was seen in. Give the word as an " +
+			"argument, or use --selection to save the text currently highlighted in any application.",
+		Args: cobra.ArbitraryArgs,
 	}
 	langs.register(cmd)
+	in.register(cmd)
 	cmd.Flags().StringVar(&formatFlag, "format", "text", "output format: text or json")
 	cmd.Flags().StringVar(&contextFlag, "context", "", "sentence or passage where the word was seen")
 	cmd.Flags().StringVar(&urlFlag, "url", "", "source URL of the context")
@@ -64,34 +88,49 @@ func newSaveCmd(env Env) *cobra.Command {
 		if err != nil {
 			return err
 		}
+		if err := in.validate(args); err != nil {
+			return err
+		}
 		return run(env, func(ctx context.Context, svc Services) error {
-			source, target, err := langs.resolve(svc)
-			if err != nil {
-				return err
-			}
-			result, err := svc.SaveWord.SaveWord(ctx, inbound.SaveWordInput{
-				Term: termArg(args), SourceLanguage: source, TargetLanguage: target,
-				Context: contextFlag, SourceURL: urlFlag,
-			})
-			if err != nil {
-				return friendly(err)
-			}
-
-			if f == formatText {
-				switch {
-				case result.Created:
-					fmt.Fprintf(env.Stdout, "Saved %q.\n", result.Item.Term())
-				case result.Occurrence != nil:
-					fmt.Fprintf(env.Stdout, "%q was already saved; added a new context.\n", result.Item.Term())
-				default:
-					fmt.Fprintf(env.Stdout, "%q was already saved.\n", result.Item.Term())
+			return in.notifyOnError(ctx, env, func() error {
+				source, target, err := langs.resolve(svc)
+				if err != nil {
+					return err
 				}
-				if result.Created && result.Occurrence != nil {
-					fmt.Fprintln(env.Stdout, "Context recorded.")
+				term, err := in.term(ctx, svc, args)
+				if err != nil {
+					return friendly(err)
+				}
+				result, err := svc.SaveWord.SaveWord(ctx, inbound.SaveWordInput{
+					Term: term, SourceLanguage: source, TargetLanguage: target,
+					Context: contextFlag, SourceURL: urlFlag,
+				})
+				if err != nil {
+					return friendly(err)
+				}
+
+				var message string
+				switch {
+				case result.Created && result.Occurrence != nil:
+					message = fmt.Sprintf("Saved %q.\nContext recorded.", result.Item.Term())
+				case result.Created:
+					message = fmt.Sprintf("Saved %q.", result.Item.Term())
+				case result.Occurrence != nil:
+					message = fmt.Sprintf("%q was already saved; added a new context.", result.Item.Term())
+				default:
+					message = fmt.Sprintf("%q was already saved.", result.Item.Term())
+				}
+
+				if f == formatText {
+					fmt.Fprintln(env.Stdout, message)
+				} else if err := renderItem(env.Stdout, f, result.Item); err != nil {
+					return err
+				}
+				if in.notify {
+					in.send(ctx, env, "Vocabinator", message)
 				}
 				return nil
-			}
-			return renderItem(env.Stdout, f, result.Item)
+			})
 		})(cmd, args)
 	}
 	return cmd
@@ -212,6 +251,8 @@ func friendly(err error) error {
 		return fmt.Errorf("no dictionary entry found for that word: %w", err)
 	case errors.Is(err, usecase.ErrItemNotFound):
 		return fmt.Errorf("that word is not in your vocabulary: %w", err)
+	case errors.Is(err, usecase.ErrNoSelection):
+		return fmt.Errorf("no text is selected: highlight a word first, or use --clipboard to read copied text: %w", err)
 	}
 	return err
 }

@@ -38,15 +38,32 @@ func (fakeTranslator) Translate(_ context.Context, texts []string, _, _ vocab.La
 	return out, nil
 }
 
+type fakeSelection struct {
+	text    string
+	err     error
+	sources []outbound.SelectionSource
+}
+
+func (f *fakeSelection) Capture(_ context.Context, src outbound.SelectionSource) (string, error) {
+	f.sources = append(f.sources, src)
+	return f.text, f.err
+}
+
+type notification struct{ title, body string }
+
 // harness builds a CLI over a real SQLite database in a temp dir.
 type harness struct {
-	t   *testing.T
-	cfg bootstrap.Config
+	t         *testing.T
+	cfg       bootstrap.Config
+	selection *fakeSelection
+	notes     []notification
+	notifyErr error
+	stderr    string
 }
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	return &harness{t: t, cfg: bootstrap.Config{
+	return &harness{t: t, selection: &fakeSelection{}, cfg: bootstrap.Config{
 		DatabasePath:   filepath.Join(t.TempDir(), "vocab.db"),
 		SourceLanguage: vocab.LanguageCodeEnglish,
 		TargetLanguage: vocab.LanguageCodePersian,
@@ -58,15 +75,20 @@ func (h *harness) run(args ...string) (stdout string, err error) {
 	var out, errOut bytes.Buffer
 
 	root := cli.NewRootCmd(cli.Env{
-		Stdout: &out,
-		Stderr: &errOut,
+		Stdout:  &out,
+		Stderr:  &errOut,
+		Version: "v1.2.3",
+		Notify: func(_ context.Context, title, body string) error {
+			h.notes = append(h.notes, notification{title, body})
+			return h.notifyErr
+		},
 		Open: func(ctx context.Context) (cli.Services, io.Closer, error) {
-			app, err := bootstrap.Build(ctx, h.cfg, bootstrap.WithDictionary(fakeDict{}), bootstrap.WithTranslator(fakeTranslator{}))
+			app, err := bootstrap.Build(ctx, h.cfg, bootstrap.WithDictionary(fakeDict{}), bootstrap.WithTranslator(fakeTranslator{}), bootstrap.WithSelectionProvider(h.selection))
 			if err != nil {
 				return cli.Services{}, nil, err
 			}
 			return cli.Services{
-				Vocabulary: app.Vocabulary, SaveWord: app.SaveWord, Lookup: app.Lookup,
+				Vocabulary: app.Vocabulary, SaveWord: app.SaveWord, Lookup: app.Lookup, Selection: app.Selection,
 				DefaultSource: h.cfg.SourceLanguage, DefaultTarget: h.cfg.TargetLanguage,
 			}, app, nil
 		},
@@ -74,6 +96,7 @@ func (h *harness) run(args ...string) (stdout string, err error) {
 	root.SetArgs(args)
 
 	err = root.ExecuteContext(context.Background())
+	h.stderr = errOut.String()
 	return out.String(), err
 }
 
@@ -273,5 +296,164 @@ func TestServeCommand(t *testing.T) {
 	root.SetArgs([]string{"serve", "--addr", "localhost:9999"})
 	if err := root.Execute(); err != nil || gotAddr != "localhost:9999" {
 		t.Errorf("custom addr: %q err=%v", gotAddr, err)
+	}
+}
+
+func TestVersionFlag(t *testing.T) {
+	if out := newHarness(t).mustRun("--version"); !strings.Contains(out, "v1.2.3") {
+		t.Errorf("unexpected version output %q", out)
+	}
+}
+
+func TestLookupSelection(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "  “Robust,” \n"
+
+	out := h.mustRun("lookup", "--selection")
+	if !strings.HasPrefix(out, "Robust") || !strings.Contains(out, "→ fa:Strong.") {
+		t.Errorf("unexpected output: %s", out)
+	}
+	if len(h.selection.sources) != 1 || h.selection.sources[0] != outbound.SelectionPrimary {
+		t.Errorf("--selection must read the primary selection, got %v", h.selection.sources)
+	}
+	if len(h.notes) != 0 {
+		t.Error("no notification without --notify")
+	}
+	if list := h.mustRun("list"); !strings.Contains(list, "No vocabulary saved yet.") {
+		t.Error("lookup must not save")
+	}
+}
+
+func TestLookupClipboardUsesClipboardSource(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "robust"
+	h.mustRun("lookup", "--clipboard")
+
+	if len(h.selection.sources) != 1 || h.selection.sources[0] != outbound.SelectionClipboard {
+		t.Errorf("got sources %v", h.selection.sources)
+	}
+}
+
+func TestSaveSelection(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "robust."
+
+	if out := h.mustRun("save", "--selection", "--context", "A robust design."); !strings.Contains(out, `Saved "robust"`) {
+		t.Errorf("unexpected output: %s", out)
+	}
+	if show := h.mustRun("show", "robust"); !strings.Contains(show, "A robust design.") {
+		t.Errorf("context not stored: %s", show)
+	}
+}
+
+func TestLookupNotify(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "robust"
+	h.mustRun("lookup", "--selection", "--notify")
+
+	if len(h.notes) != 1 {
+		t.Fatalf("expected 1 notification, got %v", h.notes)
+	}
+	n := h.notes[0]
+	if !strings.HasPrefix(n.title, "robust") || !strings.Contains(n.body, "≈ fa:robust") || !strings.Contains(n.body, "adjective: Strong.") || !strings.Contains(n.body, "→ fa:Strong.") {
+		t.Errorf("unexpected notification %+v", n)
+	}
+}
+
+func TestSaveNotify(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "robust"
+	h.mustRun("save", "--selection", "--notify")
+	h.mustRun("save", "--selection", "--notify")
+
+	if len(h.notes) != 2 || !strings.Contains(h.notes[0].body, "Saved") || !strings.Contains(h.notes[1].body, "already saved") {
+		t.Errorf("unexpected notifications %v", h.notes)
+	}
+}
+
+func TestErrorsAreNotifiedWhenRequested(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "   "
+
+	_, err := h.run("lookup", "--selection", "--notify")
+	if !errors.Is(err, usecase.ErrNoSelection) {
+		t.Fatalf("expected ErrNoSelection, got %v", err)
+	}
+	if len(h.notes) != 1 || !strings.Contains(h.notes[0].body, "no text is selected") {
+		t.Errorf("error must be notified: %v", h.notes)
+	}
+
+	// Without --notify nothing is shown.
+	h.notes = nil
+	h.run("lookup", "--selection")
+	if len(h.notes) != 0 {
+		t.Error("unexpected notification")
+	}
+}
+
+func TestSelectionErrors(t *testing.T) {
+	h := newHarness(t)
+
+	h.selection.err = outbound.ErrSelectionUnavailable
+	if _, err := h.run("lookup", "--selection"); !errors.Is(err, outbound.ErrSelectionUnavailable) {
+		t.Errorf("provider error must propagate, got %v", err)
+	}
+
+	h.selection.err = nil
+	h.selection.text = strings.Repeat("word ", 40)
+	if _, err := h.run("lookup", "--selection"); !errors.Is(err, usecase.ErrInvalidInput) || !errors.Is(err, vocab.ErrSelectionTooLong) {
+		t.Errorf("long selection: got %v", err)
+	}
+}
+
+func TestNotificationFailureDoesNotFailCommand(t *testing.T) {
+	h := newHarness(t)
+	h.selection.text = "robust"
+	h.notifyErr = errors.New("no notification daemon")
+
+	out, err := h.run("lookup", "--selection", "--notify")
+	if err != nil || !strings.Contains(out, "robust") {
+		t.Fatalf("lookup must succeed: %v", err)
+	}
+	if !strings.Contains(h.stderr, "could not show notification") {
+		t.Errorf("expected a stderr warning, got %q", h.stderr)
+	}
+}
+
+func TestInputFlagValidation(t *testing.T) {
+	h := newHarness(t)
+	cases := map[string][]string{
+		"word and selection":      {"lookup", "robust", "--selection"},
+		"selection and clipboard": {"lookup", "--selection", "--clipboard"},
+		"nothing at all":          {"lookup"},
+		"save word and clipboard": {"save", "robust", "--clipboard"},
+		"save nothing":            {"save"},
+	}
+	for name, args := range cases {
+		if _, err := h.run(args...); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+	if len(h.selection.sources) != 0 {
+		t.Error("invalid flag combinations must not touch the selection")
+	}
+}
+
+func TestNotifyWithoutNotifierWarns(t *testing.T) {
+	var errOut bytes.Buffer
+	root := cli.NewRootCmd(cli.Env{
+		Stdout: io.Discard, Stderr: &errOut,
+		Open: func(ctx context.Context) (cli.Services, io.Closer, error) {
+			cfg := bootstrap.Config{DatabasePath: filepath.Join(t.TempDir(), "v.db"), SourceLanguage: "en", TargetLanguage: "fa"}
+			app, err := bootstrap.Build(ctx, cfg, bootstrap.WithDictionary(fakeDict{}), bootstrap.WithTranslator(fakeTranslator{}))
+			if err != nil {
+				return cli.Services{}, nil, err
+			}
+			return cli.Services{Vocabulary: app.Vocabulary, SaveWord: app.SaveWord, Lookup: app.Lookup, Selection: app.Selection, DefaultSource: "en", DefaultTarget: "fa"}, app, nil
+		},
+	})
+	root.SetArgs([]string{"lookup", "robust", "--notify"})
+	if err := root.Execute(); err != nil || !strings.Contains(errOut.String(), "notifications are not available") {
+		t.Errorf("err=%v stderr=%q", err, errOut.String())
 	}
 }

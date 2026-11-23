@@ -19,6 +19,7 @@ type Services struct {
 	Vocabulary inbound.VocabularyService
 	SaveWord   inbound.SaveWordService
 	Lookup     inbound.LookupService
+	Selection  inbound.SelectionService
 
 	DefaultSource vocab.LanguageCode
 	DefaultTarget vocab.LanguageCode
@@ -31,6 +32,13 @@ type Env struct {
 	Stderr io.Writer
 	Open   func(ctx context.Context) (Services, io.Closer, error)
 
+	// Version is shown by --version.
+	Version string
+
+	// Notify shows a desktop notification. Optional: without it --notify
+	// reports that notifications are unavailable.
+	Notify func(ctx context.Context, title, body string) error
+
 	// Serve runs the local web interface until ctx is cancelled. When nil the
 	// serve command is not registered.
 	Serve func(ctx context.Context, addr string, out io.Writer) error
@@ -42,6 +50,7 @@ func NewRootCmd(env Env) *cobra.Command {
 		Short:         "Turn unknown words into knowledge.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       env.Version,
 	}
 	root.SetOut(env.Stdout)
 	root.SetErr(env.Stderr)

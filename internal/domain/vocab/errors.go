@@ -10,4 +10,5 @@ var (
 	ErrOccurrenceItemMismatch = errors.New("occurrence belongs to another vocabulary item")
 	ErrDuplicateOccurrence    = errors.New("occurrence already exists")
 	ErrOccurrenceNotFound     = errors.New("occurrence not found")
+	ErrSelectionTooLong       = errors.New("selection is too long: select a single word or a short phrase")
 )

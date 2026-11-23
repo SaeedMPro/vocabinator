@@ -11,4 +11,5 @@ var (
 	ErrInvalidInput       = errors.New("invalid input")
 	ErrInvalidFilter      = errors.New("invalid filter")
 	ErrWordNotFound       = errors.New("word not found")
+	ErrNoSelection        = errors.New("no text is selected")
 )
