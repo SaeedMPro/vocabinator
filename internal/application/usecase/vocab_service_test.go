@@ -372,3 +372,21 @@ func TestDeleteVocabOccurrence(t *testing.T) {
 		t.Errorf("expected ErrItemNotFound, got %v", err)
 	}
 }
+
+func TestFindVocabItem(t *testing.T) {
+	svc, _, _ := newService(t)
+	ctx := context.Background()
+	item := createRobust(t, svc)
+
+	got, err := svc.FindVocabItem(ctx, inbound.VocabItemKey{Term: " ROBUST ", SourceLanguage: "en", TargetLanguage: "fa"})
+	if err != nil || got.ID() != item.ID() {
+		t.Fatalf("unexpected: %v %v", got, err)
+	}
+
+	if _, err := svc.FindVocabItem(ctx, inbound.VocabItemKey{Term: "robust", SourceLanguage: "fa", TargetLanguage: "en"}); !errors.Is(err, ErrItemNotFound) {
+		t.Errorf("expected ErrItemNotFound, got %v", err)
+	}
+	if _, err := svc.FindVocabItem(ctx, inbound.VocabItemKey{Term: "", SourceLanguage: "en", TargetLanguage: "fa"}); !errors.Is(err, ErrInvalidInput) {
+		t.Errorf("expected ErrInvalidInput, got %v", err)
+	}
+}

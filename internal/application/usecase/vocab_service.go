@@ -61,6 +61,23 @@ func (s *vocabularyService) GetVocabItem(ctx context.Context, id vocab.ID) (*voc
 	return s.load(ctx, id)
 }
 
+func (s *vocabularyService) FindVocabItem(ctx context.Context, input inbound.VocabItemKey) (*vocab.VocabularyItem, error) {
+	key, err := vocab.NewVocabularyKey(input.Term, input.SourceLanguage, input.TargetLanguage)
+	if err != nil {
+		return nil, invalidInput(err)
+	}
+
+	item, found, err := s.repository.FindByKey(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("find vocabulary item by key: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("%w: %q (%s -> %s)", ErrItemNotFound, input.Term, key.SourceLanguage, key.TargetLanguage)
+	}
+
+	return item, nil
+}
+
 func (s *vocabularyService) ListVocabItems(ctx context.Context, filter inbound.VocabItemFilter) ([]*vocab.VocabularyItem, error) {
 	if filter.Limit < 0 || filter.Offset < 0 {
 		return nil, fmt.Errorf("%w: limit and offset must not be negative", ErrInvalidFilter)

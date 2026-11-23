@@ -28,6 +28,13 @@ type VocabOccurrenceFilter struct {
 	CapturedTo   *time.Time
 }
 
+// VocabItemKey identifies an item by its natural identity.
+type VocabItemKey struct {
+	Term           string
+	SourceLanguage vocab.LanguageCode
+	TargetLanguage vocab.LanguageCode
+}
+
 type CreateVocabItemInput struct {
 	Term           string
 	SourceLanguage vocab.LanguageCode
@@ -44,6 +51,8 @@ type AddVocabOccurrenceInput struct {
 type VocabularyService interface {
 	CreateVocabItem(ctx context.Context, input CreateVocabItemInput) (*vocab.VocabularyItem, error)
 	GetVocabItem(ctx context.Context, id vocab.ID) (*vocab.VocabularyItem, error)
+	// FindVocabItem resolves an item by term and language pair, returning ErrItemNotFound if absent.
+	FindVocabItem(ctx context.Context, key VocabItemKey) (*vocab.VocabularyItem, error)
 	ListVocabItems(ctx context.Context, filter VocabItemFilter) ([]*vocab.VocabularyItem, error)
 	DeleteVocabItem(ctx context.Context, id vocab.ID) error
 
