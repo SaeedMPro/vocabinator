@@ -2,9 +2,14 @@ package outbound
 
 import (
 	"context"
+	"errors"
 
 	"github.com/SaeedMPro/vocabinator/internal/domain/vocab"
 )
+
+// ErrConflict is returned by Save when another item already owns the same
+// vocabulary key (normalized term + language pair).
+var ErrConflict = errors.New("vocabulary item conflict")
 
 // VocabItemFilter narrows List results. Term matches the normalized term as a
 // substring. A zero Limit means no limit.

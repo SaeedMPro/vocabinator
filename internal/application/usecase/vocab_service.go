@@ -47,6 +47,10 @@ func (s *vocabularyService) CreateVocabItem(ctx context.Context, input inbound.C
 	}
 
 	if err := s.repository.Save(ctx, item); err != nil {
+		if errors.Is(err, outbound.ErrConflict) {
+			// Lost a race with a concurrent create of the same key.
+			return nil, fmt.Errorf("%w: %q: %w", ErrItemExists, item.Term(), err)
+		}
 		return nil, fmt.Errorf("save vocabulary item: %w", err)
 	}
 
