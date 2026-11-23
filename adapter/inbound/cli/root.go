@@ -30,6 +30,10 @@ type Env struct {
 	Stdout io.Writer
 	Stderr io.Writer
 	Open   func(ctx context.Context) (Services, io.Closer, error)
+
+	// Serve runs the local web interface until ctx is cancelled. When nil the
+	// serve command is not registered.
+	Serve func(ctx context.Context, addr string, out io.Writer) error
 }
 
 func NewRootCmd(env Env) *cobra.Command {
@@ -49,6 +53,9 @@ func NewRootCmd(env Env) *cobra.Command {
 		newShowCmd(env),
 		newRemoveCmd(env),
 	)
+	if env.Serve != nil {
+		root.AddCommand(newServeCmd(env))
+	}
 	return root
 }
 

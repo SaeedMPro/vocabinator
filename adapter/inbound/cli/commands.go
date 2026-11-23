@@ -215,3 +215,24 @@ func friendly(err error) error {
 	}
 	return err
 }
+
+// DefaultServeAddr is loopback-only by design.
+const DefaultServeAddr = "127.0.0.1:8787"
+
+func newServeCmd(env Env) *cobra.Command {
+	var addr string
+
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Start the local web interface",
+		Long: "Start the local web interface. It only listens on loopback addresses and " +
+			"prints a one-time URL containing the access token; open that URL in your browser.",
+		Args: cobra.NoArgs,
+	}
+	cmd.Flags().StringVar(&addr, "addr", DefaultServeAddr, "loopback address to listen on (127.0.0.1, ::1 or localhost)")
+
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+		return env.Serve(cmd.Context(), addr, env.Stdout)
+	}
+	return cmd
+}

@@ -247,3 +247,31 @@ func TestInvalidFlagsNeverOpenServices(t *testing.T) {
 		t.Errorf("err=%v opened=%v", err, opened)
 	}
 }
+
+func TestServeCommand(t *testing.T) {
+	// Not registered without a Serve hook.
+	root := cli.NewRootCmd(cli.Env{Stdout: io.Discard, Stderr: io.Discard})
+	root.SetArgs([]string{"serve"})
+	if err := root.Execute(); err == nil {
+		t.Error("serve must not exist without a Serve hook")
+	}
+
+	var gotAddr string
+	root = cli.NewRootCmd(cli.Env{
+		Stdout: io.Discard, Stderr: io.Discard,
+		Open: func(context.Context) (cli.Services, io.Closer, error) {
+			t.Error("serve must not open services itself")
+			return cli.Services{}, nil, errors.New("x")
+		},
+		Serve: func(_ context.Context, addr string, _ io.Writer) error { gotAddr = addr; return nil },
+	})
+
+	root.SetArgs([]string{"serve"})
+	if err := root.Execute(); err != nil || gotAddr != cli.DefaultServeAddr {
+		t.Errorf("default addr: %q err=%v", gotAddr, err)
+	}
+	root.SetArgs([]string{"serve", "--addr", "localhost:9999"})
+	if err := root.Execute(); err != nil || gotAddr != "localhost:9999" {
+		t.Errorf("custom addr: %q err=%v", gotAddr, err)
+	}
+}

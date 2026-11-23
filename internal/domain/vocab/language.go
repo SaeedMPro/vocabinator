@@ -25,3 +25,20 @@ func NewLanguageCode(value string) (LanguageCode, error) {
 func (l LanguageCode) String() string {
 	return string(l)
 }
+
+// SupportedLanguages lists every language code the domain accepts.
+func SupportedLanguages() []LanguageCode {
+	return []LanguageCode{LanguageCodeEnglish, LanguageCodePersian}
+}
+
+// DisplayName returns a human-readable English name for the language.
+func (l LanguageCode) DisplayName() string {
+	switch l {
+	case LanguageCodeEnglish:
+		return "English"
+	case LanguageCodePersian:
+		return "Persian"
+	default:
+		return string(l)
+	}
+}

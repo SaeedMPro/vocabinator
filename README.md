@@ -8,9 +8,9 @@ met it in, and study it later. Built in Go with a hexagonal architecture (see
 
 ## Status
 
-Milestones 1 to 4 are complete: domain, SQLite persistence, dictionary and
-translation lookup, and the `vocab` CLI. The web UI, selection shortcuts,
-daemon and review are not built yet.
+Milestones 1 to 5 are complete: domain, SQLite persistence, dictionary and
+translation lookup, the `vocab` CLI and the local web UI. Selection shortcuts,
+the daemon and daily review are not built yet.
 
 ## Build and test
 
@@ -28,11 +28,26 @@ vocab save robust --context "We need a robust architecture." --url https://examp
 vocab list [--search rob] [--source en] [--target fa] [--limit 20]
 vocab show robust
 vocab remove robust
+vocab serve [--addr 127.0.0.1:8787]       # local web UI
 ```
 
 Multi-word terms work without quotes (`vocab lookup ice cream`). Use
 `--source` and `--target` to choose a language pair (`en` and `fa` are
 supported). The same word with a different pair is a separate entry.
+
+## Web UI
+
+`vocab serve` starts a local dashboard (quick lookup, vocabulary list with
+search and language filters, word details with contexts, read-only settings).
+Open the URL it prints; it contains a per-run access token that is exchanged
+for a session cookie.
+
+Security: it only listens on loopback addresses (anything else is refused),
+rejects non-loopback `Host` headers (DNS rebinding), requires the token cookie
+(`HttpOnly`, `SameSite=Strict`) on every request, blocks cross-origin POSTs,
+and serves a strict Content-Security-Policy with no inline script. API keys are
+never sent to the browser. The daily review page arrives with the learning
+milestone.
 
 ## Configuration
 

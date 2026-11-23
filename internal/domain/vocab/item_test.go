@@ -356,3 +356,14 @@ func TestRestoreVocabularyItem(t *testing.T) {
 		t.Errorf("expected ErrDuplicateOccurrence, got %v", err)
 	}
 }
+
+func TestSupportedLanguagesAreAllValid(t *testing.T) {
+	for _, l := range SupportedLanguages() {
+		if _, err := NewLanguageCode(string(l)); err != nil {
+			t.Errorf("%s listed as supported but rejected: %v", l, err)
+		}
+		if l.DisplayName() == string(l) {
+			t.Errorf("%s has no display name", l)
+		}
+	}
+}

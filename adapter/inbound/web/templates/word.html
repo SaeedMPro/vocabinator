@@ -1,0 +1,49 @@
+{{define "content"}}{{$d := .Data}}
+<p><a href="/words">← Vocabulary</a></p>
+<h1>{{$d.Term}} <span class="pair">{{$d.Source}} → {{$d.Target}}</span></h1>
+<p class="muted">{{$d.SourceName}} to {{$d.TargetName}} · saved {{formatTime $d.CreatedAt}}</p>
+
+<section aria-labelledby="meaning-heading">
+  <h2 id="meaning-heading">Meaning</h2>
+  <button type="button" data-lookup-button data-result="lookup-result"
+          data-term="{{$d.Term}}" data-source="{{$d.Source}}" data-target="{{$d.Target}}">Show definitions</button>
+  <div id="lookup-result" class="result" aria-live="polite"></div>
+</section>
+
+<section aria-labelledby="contexts-heading">
+  <h2 id="contexts-heading">Contexts ({{len $d.Occurrences}})</h2>
+  {{if $d.Occurrences}}
+  <ul class="contexts">
+    {{range $d.Occurrences}}
+    <li>
+      <blockquote>{{if .Context}}{{.Context}}{{else}}<span class="muted">(no context text)</span>{{end}}</blockquote>
+      <p class="muted">{{formatTime .CapturedAt}}{{if .LinkURL}} · <a href="{{.LinkURL}}" rel="noopener noreferrer">{{.SourceURL}}</a>{{else if .SourceURL}} · {{.SourceURL}}{{end}}</p>
+      <form method="post" action="/words/{{$d.ID}}/occurrences/{{.ID}}/delete" data-confirm="Remove this context?">
+        <button type="submit" class="danger link">Remove context</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p class="muted">No contexts recorded yet.</p>
+  {{end}}
+
+  <form class="stack" method="post" action="/words/{{$d.ID}}/occurrences">
+    <h3>Add a context</h3>
+    <label>Sentence or passage
+      <textarea name="context" rows="3" maxlength="2000" required></textarea>
+    </label>
+    <label>Source URL (optional)
+      <input type="url" name="url" maxlength="2000">
+    </label>
+    <button type="submit">Add context</button>
+  </form>
+</section>
+
+<section aria-labelledby="danger-heading">
+  <h2 id="danger-heading">Remove word</h2>
+  <form method="post" action="/words/{{$d.ID}}/delete" data-confirm="Remove “{{$d.Term}}” and all its contexts?">
+    <button type="submit" class="danger">Remove this word</button>
+  </form>
+</section>
+{{end}}

@@ -1,0 +1,12 @@
+{{define "content"}}{{$d := .Data}}
+<h1>Settings</h1>
+<p class="muted">These values are read-only here. Change them with environment variables, then restart <code>vocab serve</code>.</p>
+<dl class="settings">
+  <dt>Default source language</dt><dd>{{$d.Source.DisplayName}} ({{$d.Source}}) <code>VOCAB_SOURCE_LANGUAGE</code></dd>
+  <dt>Default target language</dt><dd>{{$d.Target.DisplayName}} ({{$d.Target}}) <code>VOCAB_TARGET_LANGUAGE</code></dd>
+  <dt>Database</dt><dd><code>{{$d.DatabasePath}}</code> <code>VOCAB_DB</code></dd>
+  <dt>Translation</dt>
+  <dd>{{if $d.TranslationConfigured}}Configured{{else}}Not configured. Set <code>VOCAB_GOOGLE_TRANSLATE_API_KEY</code> to enable translations.{{end}}</dd>
+</dl>
+<p class="muted">API keys are never shown here and are never stored in the database.</p>
+{{end}}
