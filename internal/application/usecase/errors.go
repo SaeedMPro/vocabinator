@@ -10,4 +10,5 @@ var (
 	ErrItemExists         = errors.New("item already exists")
 	ErrInvalidInput       = errors.New("invalid input")
 	ErrInvalidFilter      = errors.New("invalid filter")
+	ErrWordNotFound       = errors.New("word not found")
 )
