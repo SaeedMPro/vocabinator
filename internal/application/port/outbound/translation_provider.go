@@ -7,10 +7,10 @@ import (
 )
 
 type TranslationProvider interface {
-    Translate(
-        ctx context.Context,
-        text string,
-        sourceLanguage vocab.LanguageCode,
-        targetLanguage vocab.LanguageCode,
-    ) (string, error)
+	Translate(
+		ctx context.Context,
+		text string,
+		sourceLanguage vocab.LanguageCode,
+		targetLanguage vocab.LanguageCode,
+	) (string, error)
 }

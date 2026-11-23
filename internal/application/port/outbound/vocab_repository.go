@@ -2,11 +2,12 @@ package outbound
 
 import (
 	"context"
-	"time"
 
 	"github.com/SaeedMPro/vocabinator/internal/domain/vocab"
 )
 
+// VocabItemFilter narrows List results. Term matches the normalized term as a
+// substring. A zero Limit means no limit.
 type VocabItemFilter struct {
 	Term           string
 	SourceLanguage *vocab.LanguageCode
@@ -16,52 +17,16 @@ type VocabItemFilter struct {
 	Offset int
 }
 
+// VocabularyRepository persists the VocabularyItem aggregate, including its
+// occurrences. Save must write the item and its occurrences atomically.
 type VocabularyRepository interface {
-	FindByID(
-		ctx context.Context,
-		id vocab.ID,
-	) (*vocab.VocabularyItem, bool, error)
+	FindByID(ctx context.Context, id vocab.ID) (*vocab.VocabularyItem, bool, error)
+	FindByKey(ctx context.Context, key vocab.VocabularyKey) (*vocab.VocabularyItem, bool, error)
+	List(ctx context.Context, filter VocabItemFilter) ([]*vocab.VocabularyItem, error)
 
-	FindByKey(
-		ctx context.Context,
-		key vocab.VocabularyKey,
-	) (*vocab.VocabularyItem, bool, error)
+	// Save inserts or replaces the aggregate.
+	Save(ctx context.Context, item *vocab.VocabularyItem) error
 
-	List(
-		ctx context.Context,
-		filter VocabItemFilter,
-	) ([]*vocab.VocabularyItem, error)
-
-	Upsert(
-		ctx context.Context,
-		item *vocab.VocabularyItem,
-	) error
-
-	Delete(
-		ctx context.Context,
-		id vocab.ID,
-	) error
-}
-
-type VocabOccurrenceFilter struct {
-	Context    string
-	SourceURL  string
-	CapturedAt time.Time
-}
-
-type VocabOccurrenceRepository interface {
-	FindByID(
-		ctx context.Context,
-		id vocab.ID,
-	) (*vocab.Occurrence, bool, error)
-
-	List(
-		ctx context.Context,
-		filter VocabOccurrenceFilter,
-	) ([]*vocab.Occurrence, error)
-
-	Upsert(
-		ctx context.Context,
-		occurrence *vocab.Occurrence,
-	) error
+	// Delete removes the aggregate and its occurrences. Deleting a missing ID is not an error.
+	Delete(ctx context.Context, id vocab.ID) error
 }

@@ -274,3 +274,85 @@ func TestOccurrencesReturnsCopy(t *testing.T) {
 		t.Error("modifying returned occurrences changed the original entity")
 	}
 }
+
+func TestNewVocabularyItemRejectsInvalidLanguage(t *testing.T) {
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+
+	if _, err := NewVocabularyItem("item-1", "robust", "xx", LanguageCodePersian, now); !errors.Is(err, ErrInvalidLanguageCode) {
+		t.Errorf("source: expected ErrInvalidLanguageCode, got %v", err)
+	}
+	if _, err := NewVocabularyItem("item-1", "robust", LanguageCodeEnglish, "", now); !errors.Is(err, ErrInvalidLanguageCode) {
+		t.Errorf("target: expected ErrInvalidLanguageCode, got %v", err)
+	}
+}
+
+func TestNewVocabularyKeyIdentity(t *testing.T) {
+	a, err := NewVocabularyKey("  Robust ", LanguageCodeEnglish, LanguageCodePersian)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := NewVocabularyKey("robust", LanguageCodeEnglish, LanguageCodePersian)
+	c, _ := NewVocabularyKey("robust", LanguageCodePersian, LanguageCodeEnglish)
+
+	if a != b {
+		t.Errorf("expected equal keys, got %v and %v", a, b)
+	}
+	if a == c {
+		t.Error("different language pairs must produce different keys")
+	}
+	if _, err := NewVocabularyKey("   ", LanguageCodeEnglish, LanguageCodePersian); !errors.Is(err, ErrEmptyTerm) {
+		t.Errorf("expected ErrEmptyTerm, got %v", err)
+	}
+}
+
+func TestAddOccurrenceRejectsZeroValue(t *testing.T) {
+	item := newTestItem(t)
+	if err := item.AddOccurrence(Occurrence{}); !errors.Is(err, ErrInvalidID) {
+		t.Errorf("expected ErrInvalidID, got %v", err)
+	}
+}
+
+func TestNewOccurrenceValidation(t *testing.T) {
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+
+	if _, err := NewOccurrence("", "item-1", "c", "", now); !errors.Is(err, ErrInvalidID) {
+		t.Errorf("expected ErrInvalidID, got %v", err)
+	}
+	if _, err := NewOccurrence("o1", "item-1", "c", "", time.Time{}); !errors.Is(err, ErrInvalidTimestamp) {
+		t.Errorf("expected ErrInvalidTimestamp, got %v", err)
+	}
+}
+
+func TestRemoveOccurrence(t *testing.T) {
+	item := newTestItem(t)
+	_ = item.AddOccurrence(newTestOccurrence(t, item.ID(), "o1"))
+	_ = item.AddOccurrence(newTestOccurrence(t, item.ID(), "o2"))
+
+	if err := item.RemoveOccurrence("o1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := item.Occurrences(); len(got) != 1 || got[0].ID() != "o2" {
+		t.Errorf("unexpected occurrences after removal: %v", got)
+	}
+	if err := item.RemoveOccurrence("missing"); !errors.Is(err, ErrOccurrenceNotFound) {
+		t.Errorf("expected ErrOccurrenceNotFound, got %v", err)
+	}
+}
+
+func TestRestoreVocabularyItem(t *testing.T) {
+	createdAt := time.Date(2026, 11, 22, 12, 0, 0, 0, time.UTC)
+	o := newTestOccurrence(t, "item-1", "o1")
+
+	item, err := RestoreVocabularyItem("item-1", "robust", LanguageCodeEnglish, LanguageCodePersian, createdAt, []Occurrence{o})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(item.Occurrences()) != 1 {
+		t.Errorf("expected 1 occurrence, got %d", len(item.Occurrences()))
+	}
+
+	_, err = RestoreVocabularyItem("item-1", "robust", LanguageCodeEnglish, LanguageCodePersian, createdAt, []Occurrence{o, o})
+	if !errors.Is(err, ErrDuplicateOccurrence) {
+		t.Errorf("expected ErrDuplicateOccurrence, got %v", err)
+	}
+}
