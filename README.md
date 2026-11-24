@@ -2,96 +2,103 @@
 
 Turn unknown words into knowledge.
 
-A local-first vocabulary assistant: look a word up, save it with the context you
-met it in, and study it later. Built in Go with a hexagonal architecture (see
-`docs/decisions/`).
+Look a word up, read its definitions with Persian translations, save it with the context you met it in. Local first, one binary: `vocab`.
 
-## Status
+## What we use
 
-Milestones 1 to 5 are complete (domain, SQLite persistence, dictionary and
-translation lookup, the `vocab` CLI, the local web UI). Milestone 6 is partly
-done: selected-text capture and notifications work from the CLI, but there is
-no in-process global hotkey (see [docs/shortcuts.md](docs/shortcuts.md)). The
-daemon and daily review are not built yet.
+- **Go**, a single static binary with no CGO
+- **SQLite** (`modernc.org/sqlite`, pure Go) for local storage
+- **Cobra** for the CLI, **net/http** and embedded HTML for the local web UI
+- **Free Dictionary API** for definitions
+- **MyMemory** for translation: no account, key or card ([details](docs/decisions/0002-translation-provider.md))
+- Hexagonal architecture: domain, ports, use cases, adapters
 
-## Build and test
+## Install
+
+Download the archive for your system from the
+[Releases](https://github.com/SaeedMPro/vocabinator/releases) page
+(`vocabinator_<version>_<os>_<arch>`), or build from source (below).
+Check the download against `SHA256SUMS`.
+
+### Linux
 
 ```bash
-go build -o vocab ./cmd/vocab
-go test ./...
-```
-
-## Usage
-
-```bash
-vocab lookup robust                      # look up, never saves
-vocab lookup robust --format json
-vocab save robust --context "We need a robust architecture." --url https://example.com
-vocab list [--search rob] [--source en] [--target fa] [--limit 20]
-vocab show robust
-vocab remove robust
-vocab serve [--addr 127.0.0.1:8787]       # local web UI
-
-vocab lookup --selection --notify         # highlighted text, result as a notification
-vocab save --clipboard                    # copied text
+tar -xzf vocabinator_*_linux_amd64.tar.gz      # or linux_arm64
+install -m 755 vocabinator_*/vocab ~/.local/bin/vocab
 vocab --version
 ```
 
-Multi-word terms work without quotes (`vocab lookup ice cream`). Use
-`--source` and `--target` to choose a language pair (`en` and `fa` are
-supported). The same word with a different pair is a separate entry.
+Optional, for lookup of highlighted text and notifications:
+`xclip` or `xsel` (X11), `wl-clipboard` (Wayland), `libnotify` (`notify-send`).
 
-## Web UI
+### macOS
 
-`vocab serve` starts a local dashboard (quick lookup, vocabulary list with
-search and language filters, word details with contexts, read-only settings).
-Open the URL it prints; it contains a per-run access token that is exchanged
-for a session cookie.
+```bash
+tar -xzf vocabinator_*_darwin_arm64.tar.gz     # or darwin_amd64 for Intel
+sudo install -m 755 vocabinator_*/vocab /usr/local/bin/vocab
+xattr -d com.apple.quarantine /usr/local/bin/vocab   # binary is not signed
+vocab --version
+```
 
-Security: it only listens on loopback addresses (anything else is refused),
-rejects non-loopback `Host` headers (DNS rebinding), requires the token cookie
-(`HttpOnly`, `SameSite=Strict`) on every request, blocks cross-origin POSTs,
-and serves a strict Content-Security-Policy with no inline script. API keys are
-never sent to the browser. The daily review page arrives with the learning
-milestone.
+### Windows
 
-## Configuration
+1. Unzip `vocabinator_<version>_windows_amd64.zip` (or `windows_arm64`).
+2. Move `vocab.exe` to a folder on your `PATH`, for example `C:\Tools`.
+3. In a new terminal: `vocab --version`.
 
-Environment variables:
+### From source (any OS)
+
+Needs Go (version in `go.mod`).
+
+```bash
+git clone https://github.com/SaeedMPro/vocabinator.git
+cd vocabinator
+go build -o vocab ./cmd/vocab        # vocab.exe on Windows
+```
+
+> Tested on Linux. The Windows and macOS builds compile and are tested in CI,
+> but have not been run on real machines by the author yet.
+
+## Use
+
+```bash
+vocab lookup robust                  # definitions + translations, nothing saved
+vocab save robust --context "We need a robust architecture."
+vocab list
+vocab show robust
+vocab remove robust
+vocab serve                          # local web UI (prints a URL with a token)
+```
+
+Highlighted or copied text: `vocab lookup --selection --notify`,
+`vocab lookup --clipboard`. Bind these to a key in your desktop settings,
+see [docs/shortcuts.md](docs/shortcuts.md).
+
+## Configure
+
+Environment variables, all optional:
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `VOCAB_DB` | SQLite database path | per-user data directory |
-| `VOCAB_SOURCE_LANGUAGE` | default source language | `en` |
-| `VOCAB_TARGET_LANGUAGE` | default target language | `fa` |
-| `VOCAB_GOOGLE_TRANSLATE_API_KEY` | Google Cloud Translation key | unset |
+| `VOCAB_DB` | database path | per-user data directory |
+| `VOCAB_SOURCE_LANGUAGE` / `VOCAB_TARGET_LANGUAGE` | default language pair | `en` / `fa` |
+| `VOCAB_TRANSLATION_PROVIDER` | `mymemory`, `google` or `none` | `mymemory` |
+| `VOCAB_MYMEMORY_EMAIL` | raises MyMemory's daily quota (sent to MyMemory) | unset |
+| `VOCAB_GOOGLE_TRANSLATE_API_KEY` | only for `google` | unset |
 
-Without a translation key, lookups still show definitions and print a note that
-translation is unavailable. Keys are never stored in the database.
+Definitions you look up are sent to the translation provider. Translations are
+a learning aid; short fragments can be wrong. Whether MyMemory is reachable from
+your network is not guaranteed: check with
+`go test -tags integration -run Integration -v ./adapter/outbound/mymemory`.
 
-## Releases
-
-CI (`.github/workflows/ci.yml`) vets and tests on Linux, Windows and macOS for
-every push and pull request. Pushing a version tag publishes a release:
+## Develop
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+go test ./...
+go vet ./...
 ```
 
-`.github/workflows/release.yml` then tests on all three systems, builds
-`vocab` for linux, windows and darwin (amd64 and arm64), packages them
-(`.tar.gz` for Linux and macOS, `.zip` for Windows), adds a `SHA256SUMS` file
-and creates the GitHub release with generated notes. A tag containing a hyphen
-(`v0.1.0-rc1`) is published as a prerelease.
+Releases: push a tag such as `v0.1.0`; the workflow tests on Linux, Windows and
+macOS, builds every platform and publishes the release.
 
-## Layout
-
-```
-cmd/vocab                 CLI entry point
-bootstrap                 composition root and configuration
-adapter/inbound/cli       Cobra commands (parse, call ports, render)
-adapter/outbound/...      SQLite, dictionary, translation, clock and ID adapters
-internal/application      ports and use cases
-internal/domain/vocab     aggregate and invariants
-```
+MIT licence.
