@@ -41,8 +41,8 @@ const cookieName = "vocab_session"
 // Settings is read-only information shown on the settings page. It must never
 // contain secrets.
 type Settings struct {
-	DatabasePath          string
-	TranslationConfigured bool
+	DatabasePath        string
+	TranslationProvider string
 }
 
 type Deps struct {

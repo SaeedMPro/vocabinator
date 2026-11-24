@@ -112,7 +112,7 @@ func (h *harness) mustRun(args ...string) string {
 func TestLookupText(t *testing.T) {
 	out := newHarness(t).mustRun("lookup", "robust")
 
-	for _, want := range []string{"robust  /x/", "≈ fa:robust", "adjective", "1. Strong.", "→ fa:Strong.", "Example: A robust design.", "Synonyms: sturdy"} {
+	for _, want := range []string{"robust  /x/", "adjective", "1. Strong.", "→ fa:Strong.", "Example: A robust design.", "Synonyms: sturdy"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
@@ -132,16 +132,15 @@ func TestLookupJSON(t *testing.T) {
 	out := newHarness(t).mustRun("lookup", "robust", "--format", "json", "--source", "EN", "--target", "fa")
 
 	var got struct {
-		Term        string
-		Translation string
-		Senses      []struct {
+		Term   string
+		Senses []struct {
 			Definitions []struct{ Text, Translation string }
 		}
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, out)
 	}
-	if got.Term != "robust" || got.Translation != "fa:robust" || got.Senses[0].Definitions[0].Translation != "fa:Strong." {
+	if got.Term != "robust" || got.Senses[0].Definitions[0].Translation != "fa:Strong." {
 		t.Errorf("unexpected JSON: %+v", got)
 	}
 }
@@ -355,7 +354,7 @@ func TestLookupNotify(t *testing.T) {
 		t.Fatalf("expected 1 notification, got %v", h.notes)
 	}
 	n := h.notes[0]
-	if !strings.HasPrefix(n.title, "robust") || !strings.Contains(n.body, "≈ fa:robust") || !strings.Contains(n.body, "adjective: Strong.") || !strings.Contains(n.body, "→ fa:Strong.") {
+	if !strings.HasPrefix(n.title, "robust") || !strings.Contains(n.body, "adjective: Strong.") || !strings.Contains(n.body, "→ fa:Strong.") {
 		t.Errorf("unexpected notification %+v", n)
 	}
 }

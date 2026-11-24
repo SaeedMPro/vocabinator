@@ -145,10 +145,10 @@ func (s *Server) deleteOccurrence(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "settings", page{Title: "Settings", Nav: "settings", Data: settingsView{
-		DatabasePath:          s.deps.Settings.DatabasePath,
-		TranslationConfigured: s.deps.Settings.TranslationConfigured,
-		Source:                s.deps.DefaultSource,
-		Target:                s.deps.DefaultTarget,
+		DatabasePath:        s.deps.Settings.DatabasePath,
+		TranslationProvider: s.deps.Settings.TranslationProvider,
+		Source:              s.deps.DefaultSource,
+		Target:              s.deps.DefaultTarget,
 	}})
 }
 

@@ -15,6 +15,20 @@ const (
 	EnvSourceLanguage = "VOCAB_SOURCE_LANGUAGE"
 	EnvTargetLanguage = "VOCAB_TARGET_LANGUAGE"
 	EnvGoogleAPIKey   = "VOCAB_GOOGLE_TRANSLATE_API_KEY"
+
+	// EnvTranslationProvider selects the provider: mymemory (default),
+	// google or none.
+	EnvTranslationProvider = "VOCAB_TRANSLATION_PROVIDER"
+	// EnvMyMemoryEmail optionally raises MyMemory's daily quota. The address
+	// is sent to MyMemory with each request.
+	EnvMyMemoryEmail = "VOCAB_MYMEMORY_EMAIL"
+)
+
+// Translation providers.
+const (
+	ProviderMyMemory = "mymemory"
+	ProviderGoogle   = "google"
+	ProviderNone     = "none"
 )
 
 // Config holds runtime settings. Secrets are only ever read from the
@@ -25,6 +39,9 @@ type Config struct {
 	SourceLanguage vocab.LanguageCode
 	TargetLanguage vocab.LanguageCode
 	GoogleAPIKey   string
+
+	TranslationProvider string
+	MyMemoryEmail       string
 }
 
 // LoadConfig builds a Config from environment lookups, applying defaults.
@@ -34,6 +51,18 @@ func LoadConfig(getenv func(string) string) (Config, error) {
 		SourceLanguage: vocab.LanguageCodeEnglish,
 		TargetLanguage: vocab.LanguageCodePersian,
 		GoogleAPIKey:   strings.TrimSpace(getenv(EnvGoogleAPIKey)),
+
+		TranslationProvider: strings.ToLower(strings.TrimSpace(getenv(EnvTranslationProvider))),
+		MyMemoryEmail:       strings.TrimSpace(getenv(EnvMyMemoryEmail)),
+	}
+
+	switch cfg.TranslationProvider {
+	case "":
+		cfg.TranslationProvider = ProviderMyMemory
+	case ProviderMyMemory, ProviderGoogle, ProviderNone:
+	default:
+		return Config{}, fmt.Errorf("%s: unknown provider %q (use %s, %s or %s)",
+			EnvTranslationProvider, cfg.TranslationProvider, ProviderMyMemory, ProviderGoogle, ProviderNone)
 	}
 
 	if cfg.DatabasePath == "" {

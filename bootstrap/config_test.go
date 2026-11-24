@@ -40,3 +40,39 @@ func TestLoadConfigRejectsBadLanguage(t *testing.T) {
 		t.Errorf("expected error naming %s, got %v", EnvSourceLanguage, err)
 	}
 }
+
+func TestTranslationProviderDefaultsToMyMemory(t *testing.T) {
+	cfg, err := LoadConfig(env(nil))
+	if err != nil || cfg.TranslationProvider != ProviderMyMemory || cfg.MyMemoryEmail != "" {
+		t.Errorf("cfg=%+v err=%v", cfg, err)
+	}
+	if got := cfg.TranslationLabel(); got != "MyMemory (anonymous quota)" {
+		t.Errorf("label %q", got)
+	}
+}
+
+func TestTranslationProviderSelection(t *testing.T) {
+	for in, want := range map[string]string{" MyMemory ": ProviderMyMemory, "GOOGLE": ProviderGoogle, "none": ProviderNone} {
+		cfg, err := LoadConfig(env(map[string]string{EnvTranslationProvider: in}))
+		if err != nil || cfg.TranslationProvider != want {
+			t.Errorf("%q: cfg=%+v err=%v", in, cfg, err)
+		}
+	}
+	if _, err := LoadConfig(env(map[string]string{EnvTranslationProvider: "deepl"})); err == nil || !strings.Contains(err.Error(), EnvTranslationProvider) {
+		t.Errorf("expected an error naming %s, got %v", EnvTranslationProvider, err)
+	}
+}
+
+func TestTranslationLabelNeverLeaksSecrets(t *testing.T) {
+	cfg, _ := LoadConfig(env(map[string]string{
+		EnvTranslationProvider: "mymemory", EnvMyMemoryEmail: "private@example.com", EnvGoogleAPIKey: "SECRET-KEY",
+	}))
+	label := cfg.TranslationLabel()
+	if strings.Contains(label, "private@example.com") || strings.Contains(label, "SECRET-KEY") || label != "MyMemory (extended quota)" {
+		t.Errorf("unexpected label %q", label)
+	}
+	cfg.TranslationProvider = ProviderGoogle
+	if label := cfg.TranslationLabel(); strings.Contains(label, "SECRET-KEY") {
+		t.Errorf("label leaks key: %q", label)
+	}
+}

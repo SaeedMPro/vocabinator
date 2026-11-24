@@ -9,7 +9,7 @@ import (
 
 func TestSummarizeLookup(t *testing.T) {
 	r := &inbound.LookupResult{
-		Term: "robust", Phonetic: "/x/", Translation: "قوی",
+		Term: "robust", Phonetic: "/x/",
 		Senses: []inbound.SenseResult{
 			{PartOfSpeech: "adjective", Definitions: []inbound.DefinitionResult{{Text: "Strong.", Translation: "نیرومند"}, {Text: "second"}}},
 			{PartOfSpeech: "noun", Definitions: []inbound.DefinitionResult{{Text: "A thing."}}},
@@ -21,7 +21,7 @@ func TestSummarizeLookup(t *testing.T) {
 	if title != "robust  /x/" {
 		t.Errorf("title %q", title)
 	}
-	for _, want := range []string{"≈ قوی", "adjective: Strong.", "→ نیرومند", "noun: A thing."} {
+	for _, want := range []string{"adjective: Strong.", "→ نیرومند", "noun: A thing."} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q:\n%s", want, body)
 		}

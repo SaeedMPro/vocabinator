@@ -9,6 +9,7 @@ import (
 
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/freedictionary"
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/googletranslate"
+	"github.com/SaeedMPro/vocabinator/adapter/outbound/mymemory"
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/sqlite"
 	"github.com/SaeedMPro/vocabinator/adapter/outbound/system"
 	"github.com/SaeedMPro/vocabinator/adapter/platform/selection"
@@ -71,15 +72,11 @@ func Build(ctx context.Context, cfg Config, opts ...Option) (*App, error) {
 		o.selection = selection.New()
 	}
 	if o.translator == nil {
-		if cfg.GoogleAPIKey == "" {
-			o.translator = disabledTranslator{}
-		} else {
-			t, err := googletranslate.New(googletranslate.Config{APIKey: cfg.GoogleAPIKey})
-			if err != nil {
-				return nil, fmt.Errorf("configure translation provider: %w", err)
-			}
-			o.translator = t
+		t, err := newTranslator(cfg)
+		if err != nil {
+			return nil, err
 		}
+		o.translator = t
 	}
 
 	db, err := sqlite.Open(ctx, cfg.DatabasePath)
@@ -99,12 +96,48 @@ func Build(ctx context.Context, cfg Config, opts ...Option) (*App, error) {
 	}, nil
 }
 
-// ErrTranslationNotConfigured explains why translations are missing.
-var ErrTranslationNotConfigured = errors.New("translation is not configured (set " + EnvGoogleAPIKey + ")")
+// newTranslator builds the configured translation provider. MyMemory is the
+// default because it needs no account, key or payment card.
+func newTranslator(cfg Config) (outbound.TranslationProvider, error) {
+	switch cfg.TranslationProvider {
+	case ProviderNone:
+		return disabledTranslator{}, nil
+	case ProviderGoogle:
+		t, err := googletranslate.New(googletranslate.Config{APIKey: cfg.GoogleAPIKey})
+		if err != nil {
+			return nil, fmt.Errorf("configure %s: set %s (%w)", ProviderGoogle, EnvGoogleAPIKey, err)
+		}
+		return t, nil
+	default:
+		t, err := mymemory.New(mymemory.Config{Email: cfg.MyMemoryEmail})
+		if err != nil {
+			return nil, fmt.Errorf("configure %s: %w", ProviderMyMemory, err)
+		}
+		return t, nil
+	}
+}
+
+// TranslationLabel describes the active provider for display. It never
+// includes credentials or the configured email.
+func (c Config) TranslationLabel() string {
+	switch c.TranslationProvider {
+	case ProviderNone:
+		return "Disabled"
+	case ProviderGoogle:
+		return "Google Cloud Translation"
+	}
+	if c.MyMemoryEmail != "" {
+		return "MyMemory (extended quota)"
+	}
+	return "MyMemory (anonymous quota)"
+}
+
+// ErrTranslationDisabled explains why translations are missing.
+var ErrTranslationDisabled = errors.New("translation is disabled (" + EnvTranslationProvider + "=none)")
 
 // disabledTranslator lets lookups degrade gracefully when no key is set.
 type disabledTranslator struct{}
 
 func (disabledTranslator) Translate(context.Context, []string, vocab.LanguageCode, vocab.LanguageCode) ([]string, error) {
-	return nil, ErrTranslationNotConfigured
+	return nil, ErrTranslationDisabled
 }

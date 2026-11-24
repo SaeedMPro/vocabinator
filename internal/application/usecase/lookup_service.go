@@ -14,8 +14,10 @@ import (
 
 const (
 	maxTermRunes = 100
-	// maxTranslatedDefinitions bounds translation cost per lookup.
-	maxTranslatedDefinitions = 8
+	// maxTranslatedDefinitions bounds translation cost per lookup. Free
+	// providers meter characters per day, so only the first definitions are
+	// translated; all definitions are still returned.
+	maxTranslatedDefinitions = 5
 )
 
 type lookupService struct {
@@ -64,9 +66,11 @@ func (s *lookupService) LookupWord(ctx context.Context, input inbound.LookupWord
 	return result, nil
 }
 
-// translate fills Translation fields using a single batched provider call.
+// translate fills each definition's Translation. Definitions are translated,
+// never the bare headword: an isolated word is ambiguous ("run") and
+// translates poorly, while a definition carries its own sense.
 func (s *lookupService) translate(ctx context.Context, r *inbound.LookupResult, key vocab.VocabularyKey) error {
-	texts := []string{r.Term}
+	var texts []string
 	var targets []*inbound.DefinitionResult
 
 	for i := range r.Senses {
@@ -80,6 +84,10 @@ func (s *lookupService) translate(ctx context.Context, r *inbound.LookupResult, 
 		}
 	}
 
+	if len(texts) == 0 {
+		return nil
+	}
+
 	out, err := s.translator.Translate(ctx, texts, key.SourceLanguage, key.TargetLanguage)
 	if err != nil {
 		return err
@@ -88,9 +96,8 @@ func (s *lookupService) translate(ctx context.Context, r *inbound.LookupResult, 
 		return fmt.Errorf("translator returned %d translations for %d texts", len(out), len(texts))
 	}
 
-	r.Translation = out[0]
 	for i, d := range targets {
-		d.Translation = out[i+1]
+		d.Translation = out[i]
 	}
 	return nil
 }

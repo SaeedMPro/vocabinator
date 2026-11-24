@@ -66,7 +66,7 @@ func newEnv(t *testing.T, noAuth bool) *env {
 	handler, err := web.NewServer(web.Deps{
 		Vocabulary: app.Vocabulary, SaveWord: app.SaveWord, Lookup: app.Lookup,
 		DefaultSource: "en", DefaultTarget: "fa",
-		Settings: web.Settings{DatabasePath: "/data/vocab.db"},
+		Settings: web.Settings{DatabasePath: "/data/vocab.db", TranslationProvider: "MyMemory (anonymous quota)"},
 		Token:    token,
 	})
 	if err != nil {
@@ -418,15 +418,15 @@ func TestLookupAPI(t *testing.T) {
 		t.Fatalf("status %d: %s", status, body)
 	}
 	var got struct {
-		Term, Translation string
-		Senses            []struct {
+		Term   string
+		Senses []struct {
 			Definitions []struct{ Text, Translation string }
 		}
 	}
 	if err := json.Unmarshal([]byte(body), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Term != "robust" || got.Translation != "fa:robust" || got.Senses[0].Definitions[0].Translation != "fa:Strong." {
+	if got.Term != "robust" || got.Senses[0].Definitions[0].Translation != "fa:Strong." {
 		t.Errorf("unexpected body %s", body)
 	}
 
@@ -452,7 +452,7 @@ func TestLookupAPI(t *testing.T) {
 func TestSettingsPage(t *testing.T) {
 	e := newEnv(t, false)
 	_, body := e.get("/settings")
-	for _, want := range []string{"/data/vocab.db", "Not configured", "VOCAB_GOOGLE_TRANSLATE_API_KEY", "English"} {
+	for _, want := range []string{"/data/vocab.db", "MyMemory (anonymous quota)", "VOCAB_TRANSLATION_PROVIDER", "English"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("settings missing %q", want)
 		}

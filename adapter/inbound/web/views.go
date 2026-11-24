@@ -148,10 +148,10 @@ func safeLink(raw string) string {
 }
 
 type settingsView struct {
-	DatabasePath          string
-	TranslationConfigured bool
-	Source                vocab.LanguageCode
-	Target                vocab.LanguageCode
+	DatabasePath        string
+	TranslationProvider string
+	Source              vocab.LanguageCode
+	Target              vocab.LanguageCode
 }
 
 type errorView struct {
@@ -162,11 +162,10 @@ type errorView struct {
 // JSON contract for /api/lookup.
 
 type lookupJSON struct {
-	Term        string      `json:"term"`
-	Phonetic    string      `json:"phonetic,omitempty"`
-	Translation string      `json:"translation,omitempty"`
-	Senses      []senseJSON `json:"senses"`
-	Warnings    []string    `json:"warnings,omitempty"`
+	Term     string      `json:"term"`
+	Phonetic string      `json:"phonetic,omitempty"`
+	Senses   []senseJSON `json:"senses"`
+	Warnings []string    `json:"warnings,omitempty"`
 }
 
 type senseJSON struct {
@@ -183,7 +182,7 @@ type definitionJSON struct {
 }
 
 func toLookupJSON(r *inbound.LookupResult) lookupJSON {
-	out := lookupJSON{Term: r.Term, Phonetic: r.Phonetic, Translation: r.Translation, Warnings: r.Warnings, Senses: []senseJSON{}}
+	out := lookupJSON{Term: r.Term, Phonetic: r.Phonetic, Warnings: r.Warnings, Senses: []senseJSON{}}
 	for _, s := range r.Senses {
 		sj := senseJSON{PartOfSpeech: s.PartOfSpeech, Examples: s.Examples, Synonyms: s.Synonyms, Antonyms: s.Antonyms, Definitions: []definitionJSON{}}
 		for _, d := range s.Definitions {

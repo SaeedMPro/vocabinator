@@ -84,8 +84,8 @@ func serve(ctx context.Context, addr string, out io.Writer) error {
 		DefaultSource: cfg.SourceLanguage,
 		DefaultTarget: cfg.TargetLanguage,
 		Settings: web.Settings{
-			DatabasePath:          cfg.DatabasePath,
-			TranslationConfigured: cfg.GoogleAPIKey != "",
+			DatabasePath:        cfg.DatabasePath,
+			TranslationProvider: cfg.TranslationLabel(),
 		},
 		Token: token,
 	})

@@ -130,7 +130,7 @@ func (c *Client) once(ctx context.Context, method, url string, header http.Heade
 	}
 
 	if err := json.Unmarshal(data, out); err != nil {
-		return 0, fmt.Errorf("decode response: %w", err)
+		return 0, &DecodeError{err: err}
 	}
 	return 0, nil
 }
@@ -140,6 +140,24 @@ type transportError struct{ err error }
 
 func (e *transportError) Error() string { return "send request: " + e.err.Error() }
 func (e *transportError) Unwrap() error { return e.err }
+
+// DecodeError marks a 2xx response whose body was not the expected JSON.
+type DecodeError struct{ err error }
+
+func (e *DecodeError) Error() string { return "decode response: " + e.err.Error() }
+func (e *DecodeError) Unwrap() error { return e.err }
+
+// IsTransport reports whether err is a failure to complete the HTTP exchange.
+func IsTransport(err error) bool {
+	var te *transportError
+	return errors.As(err, &te)
+}
+
+// IsDecode reports whether err is a response decoding failure.
+func IsDecode(err error) bool {
+	var de *DecodeError
+	return errors.As(err, &de)
+}
 
 func retryable(err error) bool {
 	var se *StatusError

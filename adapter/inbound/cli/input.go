@@ -82,10 +82,6 @@ func summarizeLookup(r *inbound.LookupResult) (title, body string) {
 	}
 
 	var lines []string
-	if r.Translation != "" {
-		lines = append(lines, "≈ "+r.Translation)
-	}
-
 	shown := 0
 	for _, s := range r.Senses {
 		if len(s.Definitions) == 0 || shown == 2 {
@@ -102,7 +98,7 @@ func summarizeLookup(r *inbound.LookupResult) (title, body string) {
 			lines = append(lines, "→ "+d.Translation)
 		}
 	}
-	if len(r.Warnings) > 0 && r.Translation == "" {
+	if len(r.Warnings) > 0 {
 		lines = append(lines, "(translation unavailable)")
 	}
 

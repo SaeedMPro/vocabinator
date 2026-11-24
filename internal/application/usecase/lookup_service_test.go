@@ -77,7 +77,7 @@ func TestLookupWordMergesAndTranslates(t *testing.T) {
 	if d.gotTerm != "Robust" || d.gotLang != vocab.LanguageCodeEnglish {
 		t.Errorf("dictionary got %q/%q", d.gotTerm, d.gotLang)
 	}
-	if r.Term != "Robust" || r.Phonetic != "/rəˈbʌst/" || r.Translation != "fa:Robust" || len(r.Warnings) != 0 {
+	if r.Term != "Robust" || r.Phonetic != "/rəˈbʌst/" || len(r.Warnings) != 0 {
 		t.Errorf("unexpected result %+v", r)
 	}
 	if len(r.Senses) != 2 || r.Senses[0].Definitions[1].Translation != "fa:Resilient." || r.Senses[1].Definitions[0].Translation != "fa:Other." {
@@ -85,6 +85,16 @@ func TestLookupWordMergesAndTranslates(t *testing.T) {
 	}
 	if tr.calls != 1 {
 		t.Errorf("expected one batched translation call, got %d", tr.calls)
+	}
+	// Only definitions are translated. The bare headword is ambiguous and is
+	// never sent to the translation provider.
+	for _, sent := range tr.gotText {
+		if sent == "Robust" || sent == "robust" {
+			t.Errorf("headword must not be translated in isolation: %v", tr.gotText)
+		}
+	}
+	if len(tr.gotText) != 3 || tr.gotText[0] != "Strong." {
+		t.Errorf("expected the three definitions in order, got %v", tr.gotText)
 	}
 }
 
@@ -100,8 +110,8 @@ func TestLookupWordLimitsTranslatedDefinitions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tr.gotText) != 1+maxTranslatedDefinitions {
-		t.Errorf("expected %d texts, got %d", 1+maxTranslatedDefinitions, len(tr.gotText))
+	if len(tr.gotText) != maxTranslatedDefinitions {
+		t.Errorf("expected %d texts, got %d", maxTranslatedDefinitions, len(tr.gotText))
 	}
 	if len(r.Senses[0].Definitions) != 20 || r.Senses[0].Definitions[maxTranslatedDefinitions].Translation != "" {
 		t.Error("all definitions must be returned, only the first few translated")
@@ -118,7 +128,7 @@ func TestLookupWordTranslationFailureDegrades(t *testing.T) {
 			if err != nil {
 				t.Fatalf("lookup must still succeed: %v", err)
 			}
-			if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0], "translation unavailable") || r.Translation != "" || len(r.Senses) != 2 {
+			if len(r.Warnings) != 1 || !strings.Contains(r.Warnings[0], "translation unavailable") || len(r.Senses) != 2 {
 				t.Errorf("unexpected result %+v", r)
 			}
 		})
@@ -147,7 +157,7 @@ func TestLookupWordSameLanguageSkipsTranslation(t *testing.T) {
 	in := inbound.LookupWordInput{Term: "robust", SourceLanguage: "en", TargetLanguage: "en"}
 
 	r, err := lookup(t, &fakeDict{entries: robustEntries()}, tr, in)
-	if err != nil || tr.calls != 0 || r.Translation != "" {
+	if err != nil || tr.calls != 0 || r.Senses[0].Definitions[0].Translation != "" {
 		t.Errorf("err=%v calls=%d result=%+v", err, tr.calls, r)
 	}
 }

@@ -6,7 +6,7 @@
   <dt>Default target language</dt><dd>{{$d.Target.DisplayName}} ({{$d.Target}}) <code>VOCAB_TARGET_LANGUAGE</code></dd>
   <dt>Database</dt><dd><code>{{$d.DatabasePath}}</code> <code>VOCAB_DB</code></dd>
   <dt>Translation</dt>
-  <dd>{{if $d.TranslationConfigured}}Configured{{else}}Not configured. Set <code>VOCAB_GOOGLE_TRANSLATE_API_KEY</code> to enable translations.{{end}}</dd>
+  <dd>{{$d.TranslationProvider}} <code>VOCAB_TRANSLATION_PROVIDER</code></dd>
 </dl>
-<p class="muted">API keys are never shown here and are never stored in the database.</p>
+<p class="muted">Definitions you look up are sent to the translation provider. Credentials and email addresses are never shown here and are never stored in the database.</p>
 {{end}}

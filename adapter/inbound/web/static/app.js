@@ -24,10 +24,6 @@
     if (data.phonetic) head.appendChild(el('span', { class: 'phonetic', text: data.phonetic }));
 
     var card = el('div', { class: 'card' }, [head]);
-    if (data.translation) {
-      card.appendChild(el('p', { class: 'translation', dir: 'auto', lang: query.target, text: '≈ ' + data.translation }));
-    }
-
     data.senses.forEach(function (sense) {
       var defs = el('ol');
       sense.definitions.forEach(function (d) {

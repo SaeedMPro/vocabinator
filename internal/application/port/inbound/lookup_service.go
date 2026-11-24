@@ -18,10 +18,6 @@ type LookupResult struct {
 	Term     string
 	Phonetic string
 
-	// Translation is the isolated term translation. It is a hint only: words
-	// are ambiguous, so prefer the per-definition translations.
-	Translation string
-
 	Senses []SenseResult
 
 	// Warnings describe degraded results, e.g. translation being unavailable.

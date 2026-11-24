@@ -25,11 +25,10 @@ func writeJSON(w io.Writer, v any) error {
 // JSON views keep the machine-readable contract independent of internal types.
 
 type lookupJSON struct {
-	Term        string      `json:"term"`
-	Phonetic    string      `json:"phonetic,omitempty"`
-	Translation string      `json:"translation,omitempty"`
-	Senses      []senseJSON `json:"senses"`
-	Warnings    []string    `json:"warnings,omitempty"`
+	Term     string      `json:"term"`
+	Phonetic string      `json:"phonetic,omitempty"`
+	Senses   []senseJSON `json:"senses"`
+	Warnings []string    `json:"warnings,omitempty"`
 }
 
 type senseJSON struct {
@@ -80,7 +79,7 @@ func toItemJSON(item *vocab.VocabularyItem) itemJSON {
 
 func renderLookup(w io.Writer, f format, r *inbound.LookupResult) error {
 	if f == formatJSON {
-		out := lookupJSON{Term: r.Term, Phonetic: r.Phonetic, Translation: r.Translation, Warnings: r.Warnings, Senses: []senseJSON{}}
+		out := lookupJSON{Term: r.Term, Phonetic: r.Phonetic, Warnings: r.Warnings, Senses: []senseJSON{}}
 		for _, s := range r.Senses {
 			sj := senseJSON{PartOfSpeech: s.PartOfSpeech, Examples: s.Examples, Synonyms: s.Synonyms, Antonyms: s.Antonyms, Definitions: []definitionJSON{}}
 			for _, d := range s.Definitions {
@@ -96,9 +95,6 @@ func renderLookup(w io.Writer, f format, r *inbound.LookupResult) error {
 		head += "  " + r.Phonetic
 	}
 	fmt.Fprintln(w, head)
-	if r.Translation != "" {
-		fmt.Fprintf(w, "≈ %s\n", r.Translation)
-	}
 
 	for _, s := range r.Senses {
 		fmt.Fprintf(w, "\n%s\n", orDefault(s.PartOfSpeech, "(unspecified)"))
