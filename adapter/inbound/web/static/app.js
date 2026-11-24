@@ -17,30 +17,86 @@
     return el('p', {}, [el('strong', { text: label + ': ' }), document.createTextNode(items.join(', '))]);
   }
 
+  var DEFINITIONS_SHOWN = 3;
+
+  function definitionItem(d, lang) {
+    var li = el('li', { text: d.text });
+    if (d.translation) li.appendChild(el('div', { class: 'translation', dir: 'auto', lang: lang, text: d.translation }));
+    if (d.example) li.appendChild(el('div', { class: 'example', text: d.example }));
+    return li;
+  }
+
+  function senseBlock(sense, lang) {
+    var shown = sense.definitions.slice(0, DEFINITIONS_SHOWN);
+    var rest = sense.definitions.slice(DEFINITIONS_SHOWN);
+
+    var block = el('div', { class: 'sense' }, [
+      el('div', { class: 'pos', text: sense.partOfSpeech || '' }),
+      el('ol', {}, shown.map(function (d) { return definitionItem(d, lang); }))
+    ]);
+
+    if (rest.length) {
+      var more = el('ol', { start: String(DEFINITIONS_SHOWN + 1) }, rest.map(function (d) { return definitionItem(d, lang); }));
+      block.appendChild(el('details', {}, [
+        el('summary', { text: rest.length + ' more definition' + (rest.length === 1 ? '' : 's') }),
+        more
+      ]));
+    }
+
+    var syn = list('Synonyms', sense.synonyms);
+    var ant = list('Antonyms', sense.antonyms);
+    if (syn) block.appendChild(syn);
+    if (ant) block.appendChild(ant);
+    return block;
+  }
+
+  // Provider-supplied URLs are only linked when they are plain http(s).
+  function safeUrl(u) {
+    try {
+      var parsed = new URL(u);
+      return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.href : null;
+    } catch (e) { return null; }
+  }
+
+  function link(href, text, label) {
+    var safe = safeUrl(href);
+    if (!safe) return document.createTextNode(text);
+    var attrs = { href: safe, target: '_blank', rel: 'noopener noreferrer' };
+    if (label) attrs['aria-label'] = label;
+    return el('a', attrs, [document.createTextNode(text)]);
+  }
+
+  function pronunciations(data) {
+    var items = data.pronunciations && data.pronunciations.length
+      ? data.pronunciations
+      : (data.phonetic ? [{ text: data.phonetic }] : []);
+    if (!items.length) return null;
+
+    return el('p', { class: 'pronunciations' }, items.map(function (p) {
+      var chip = el('span', { class: 'chip' }, [el('span', { text: p.text })]);
+      if (p.audioUrl) chip.appendChild(link(p.audioUrl, '🔊 Listen', 'Listen to ' + p.text));
+      return chip;
+    }));
+  }
+
+  function attribution(a) {
+    if (!a || (!a.sourceName && !a.license)) return null;
+    var p = el('p', { class: 'attribution muted' }, [document.createTextNode('Source: ')]);
+    p.appendChild(a.sourceUrl ? link(a.sourceUrl, a.sourceName || a.sourceUrl) : document.createTextNode(a.sourceName || 'dictionary'));
+    if (a.license) {
+      p.appendChild(document.createTextNode(' · '));
+      p.appendChild(a.licenseUrl ? link(a.licenseUrl, a.license) : document.createTextNode(a.license));
+    }
+    return p;
+  }
+
   function renderResult(container, data, saveable, query) {
     container.replaceChildren();
 
-    var head = el('h3', { text: data.term }, []);
-    if (data.phonetic) head.appendChild(el('span', { class: 'phonetic', text: data.phonetic }));
-
-    var card = el('div', { class: 'card' }, [head]);
-    data.senses.forEach(function (sense) {
-      var defs = el('ol');
-      sense.definitions.forEach(function (d) {
-        var li = el('li', { text: d.text });
-        if (d.translation) li.appendChild(el('div', { class: 'translation', dir: 'auto', lang: query.target, text: d.translation }));
-        defs.appendChild(li);
-      });
-      card.appendChild(el('div', { class: 'sense' }, [
-        el('div', { class: 'pos', text: sense.partOfSpeech || '' }),
-        defs,
-        sense.examples && sense.examples.length ? el('p', { class: 'muted', text: 'Example: ' + sense.examples[0] }) : null,
-        list('Synonyms', sense.synonyms),
-        list('Antonyms', sense.antonyms)
-      ]));
-    });
-
+    var card = el('div', { class: 'card' }, [el('h3', { text: data.term }), pronunciations(data)]);
+    data.senses.forEach(function (sense) { card.appendChild(senseBlock(sense, query.target)); });
     (data.warnings || []).forEach(function (w) { card.appendChild(el('p', { class: 'warning', text: w })); });
+    card.appendChild(attribution(data.attribution));
     container.appendChild(card);
 
     if (saveable) container.appendChild(saveForm(query));

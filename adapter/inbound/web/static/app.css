@@ -99,7 +99,12 @@ td form { margin: 0; }
 .result:empty { display: none; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
 .card h3 { font-size: 1.3rem; }
-.card .phonetic { color: var(--muted); font-weight: 400; margin-left: 8px; }
+.pronunciations { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 0; }
+.chip { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--border); border-radius: 999px; padding: 1px 10px; color: var(--muted); font-size: .95rem; }
+.example { color: var(--muted); font-style: italic; margin-top: 2px; }
+.attribution { font-size: .85rem; margin-top: 12px; }
+details { margin: 4px 0 4px 1.2rem; }
+summary { cursor: pointer; color: var(--primary); }
 .sense { margin-top: 12px; }
 .pos { font-style: italic; color: var(--muted); }
 .sense ol { margin: 4px 0 4px 1.2rem; padding: 0; }

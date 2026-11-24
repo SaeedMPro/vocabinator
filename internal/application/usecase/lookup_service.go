@@ -70,18 +70,10 @@ func (s *lookupService) LookupWord(ctx context.Context, input inbound.LookupWord
 // never the bare headword: an isolated word is ambiguous ("run") and
 // translates poorly, while a definition carries its own sense.
 func (s *lookupService) translate(ctx context.Context, r *inbound.LookupResult, key vocab.VocabularyKey) error {
-	var texts []string
-	var targets []*inbound.DefinitionResult
-
-	for i := range r.Senses {
-		for j := range r.Senses[i].Definitions {
-			if len(targets) == maxTranslatedDefinitions {
-				break
-			}
-			d := &r.Senses[i].Definitions[j]
-			texts = append(texts, d.Text)
-			targets = append(targets, d)
-		}
+	targets := pickForTranslation(r.Senses, maxTranslatedDefinitions)
+	texts := make([]string, len(targets))
+	for i, d := range targets {
+		texts[i] = d.Text
 	}
 
 	if len(texts) == 0 {
@@ -102,23 +94,53 @@ func (s *lookupService) translate(ctx context.Context, r *inbound.LookupResult, 
 	return nil
 }
 
+// pickForTranslation chooses which definitions to translate, round-robin
+// across senses: the first definition of every part of speech, then the
+// second of each, and so on. A limited budget therefore covers every sense
+// before it goes deeper into any one of them.
+func pickForTranslation(senses []inbound.SenseResult, limit int) []*inbound.DefinitionResult {
+	var picked []*inbound.DefinitionResult
+	for depth := 0; len(picked) < limit; depth++ {
+		added := false
+		for i := range senses {
+			if depth < len(senses[i].Definitions) && len(picked) < limit {
+				picked = append(picked, &senses[i].Definitions[depth])
+				added = true
+			}
+		}
+		if !added {
+			break
+		}
+	}
+	return picked
+}
+
 // mergeEntries combines homograph entries into one result, preserving order.
 func mergeEntries(term string, entries []outbound.DictionaryEntry) *inbound.LookupResult {
 	result := &inbound.LookupResult{Term: term}
 
+	seenPron := map[string]bool{}
 	for _, e := range entries {
 		if result.Phonetic == "" {
 			result.Phonetic = e.Phonetic
 		}
+		if result.Attribution == (inbound.AttributionResult{}) {
+			result.Attribution = inbound.AttributionResult(e.Attribution)
+		}
+		for _, p := range e.Pronunciations {
+			if !seenPron[p.Text] {
+				seenPron[p.Text] = true
+				result.Pronunciations = append(result.Pronunciations, inbound.PronunciationResult(p))
+			}
+		}
 		for _, sense := range e.Senses {
 			sr := inbound.SenseResult{
 				PartOfSpeech: sense.PartOfSpeech,
-				Examples:     sense.Examples,
 				Synonyms:     sense.Synonyms,
 				Antonyms:     sense.Antonyms,
 			}
 			for _, d := range sense.Definitions {
-				sr.Definitions = append(sr.Definitions, inbound.DefinitionResult{Text: d})
+				sr.Definitions = append(sr.Definitions, inbound.DefinitionResult{Text: d.Text, Example: d.Example})
 			}
 			result.Senses = append(result.Senses, sr)
 		}

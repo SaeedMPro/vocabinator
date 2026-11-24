@@ -26,9 +26,20 @@ func (fakeDict) Lookup(_ context.Context, term string, _ vocab.LanguageCode) ([]
 	if term == "zzzz" {
 		return nil, outbound.ErrNotFound
 	}
-	return []outbound.DictionaryEntry{{Term: term, Phonetic: "/x/", Senses: []outbound.WordSense{{
-		PartOfSpeech: "adjective", Definitions: []string{"Strong."},
-	}}}}, nil
+	return []outbound.DictionaryEntry{{
+		Term: term, Phonetic: "/x/",
+		Pronunciations: []outbound.Pronunciation{
+			{Text: "/x/", AudioURL: "https://example.com/x.mp3"},
+			{Text: "/y/", AudioURL: "javascript:alert(1)"},
+		},
+		Attribution: outbound.Attribution{
+			SourceName: "Wiktionary", SourceURL: "javascript:alert(2)",
+			License: "CC BY-SA 3.0", LicenseURL: "https://creativecommons.org/licenses/by-sa/3.0",
+		},
+		Senses: []outbound.WordSense{{
+			PartOfSpeech: "adjective", Definitions: []outbound.Definition{{Text: "Strong.", Example: "A robust wall."}},
+		}},
+	}}, nil
 }
 
 type fakeTranslator struct{}
@@ -446,6 +457,34 @@ func TestLookupAPI(t *testing.T) {
 		if status != want || json.Unmarshal([]byte(body), &errBody) != nil || errBody.Error == "" {
 			t.Errorf("%s: status %d body %s", path, status, body)
 		}
+	}
+}
+
+func TestLookupAPIReturnsRichDataWithOnlySafeLinks(t *testing.T) {
+	e := newEnv(t, false)
+	_, body := e.get("/api/lookup?term=robust&source=en&target=fa")
+
+	var got struct {
+		Pronunciations []struct{ Text, AudioURL string }
+		Attribution    struct{ SourceName, SourceURL, License, LicenseURL string }
+		Senses         []struct{ Definitions []struct{ Example string } }
+	}
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatal(err)
+	}
+
+	if got.Senses[0].Definitions[0].Example != "A robust wall." || got.Attribution.License != "CC BY-SA 3.0" {
+		t.Errorf("missing example or attribution: %s", body)
+	}
+	if len(got.Pronunciations) != 2 || got.Pronunciations[0].AudioURL != "https://example.com/x.mp3" {
+		t.Errorf("unexpected pronunciations: %s", body)
+	}
+	// Non-http(s) URLs from a provider are dropped before they reach the browser.
+	if got.Pronunciations[1].AudioURL != "" || got.Attribution.SourceURL != "" || got.Attribution.LicenseURL == "" {
+		t.Errorf("unsafe URLs must be dropped, safe ones kept: %s", body)
+	}
+	if strings.Contains(body, "javascript:") {
+		t.Errorf("javascript: URL leaked: %s", body)
 	}
 }
 

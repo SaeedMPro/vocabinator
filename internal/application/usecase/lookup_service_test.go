@@ -51,12 +51,22 @@ func (f *fakeTranslator) Translate(_ context.Context, texts []string, _, _ vocab
 
 func robustEntries() []outbound.DictionaryEntry {
 	return []outbound.DictionaryEntry{
-		{Term: "robust", Phonetic: "/rəˈbʌst/", Senses: []outbound.WordSense{
-			{PartOfSpeech: "adjective", Definitions: []string{"Strong.", "Resilient."}, Examples: []string{"A robust design."}, Synonyms: []string{"sturdy"}},
-		}},
-		{Term: "robust", Phonetic: "ignored", Senses: []outbound.WordSense{
-			{PartOfSpeech: "noun", Definitions: []string{"Other."}},
-		}},
+		{
+			Term: "robust", Phonetic: "/rəˈbʌst/",
+			Pronunciations: []outbound.Pronunciation{{Text: "/rəˈbʌst/", AudioURL: "https://x/uk.mp3"}, {Text: "/roʊˈbʌst/"}},
+			Attribution:    outbound.Attribution{SourceName: "Wiktionary", License: "CC BY-SA 3.0"},
+			Senses: []outbound.WordSense{{
+				PartOfSpeech: "adjective",
+				Definitions:  []outbound.Definition{{Text: "Strong.", Example: "A robust design."}, {Text: "Resilient."}},
+				Synonyms:     []string{"sturdy"},
+			}},
+		},
+		{
+			Term: "robust", Phonetic: "ignored",
+			Pronunciations: []outbound.Pronunciation{{Text: "/roʊˈbʌst/"}, {Text: "/other/"}},
+			Attribution:    outbound.Attribution{SourceName: "Other"},
+			Senses:         []outbound.WordSense{{PartOfSpeech: "noun", Definitions: []outbound.Definition{{Text: "Other."}}}},
+		},
 	}
 }
 
@@ -98,10 +108,30 @@ func TestLookupWordMergesAndTranslates(t *testing.T) {
 	}
 }
 
+func TestLookupWordKeepsExamplesPronunciationsAndAttribution(t *testing.T) {
+	r, err := lookup(t, &fakeDict{entries: robustEntries()}, &fakeTranslator{}, enFa)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The example stays attached to its own definition.
+	if d := r.Senses[0].Definitions; d[0].Example != "A robust design." || d[1].Example != "" {
+		t.Errorf("examples not attached to definitions: %+v", d)
+	}
+	// Pronunciations are merged without duplicates, keeping audio.
+	if len(r.Pronunciations) != 3 || r.Pronunciations[0].AudioURL != "https://x/uk.mp3" || r.Pronunciations[2].Text != "/other/" {
+		t.Errorf("unexpected pronunciations %+v", r.Pronunciations)
+	}
+	// Attribution comes from the first entry that has one.
+	if r.Attribution.SourceName != "Wiktionary" || r.Attribution.License != "CC BY-SA 3.0" {
+		t.Errorf("unexpected attribution %+v", r.Attribution)
+	}
+}
+
 func TestLookupWordLimitsTranslatedDefinitions(t *testing.T) {
-	var defs []string
+	var defs []outbound.Definition
 	for i := range 20 {
-		defs = append(defs, fmt.Sprintf("def %d", i))
+		defs = append(defs, outbound.Definition{Text: fmt.Sprintf("def %d", i)})
 	}
 	d := &fakeDict{entries: []outbound.DictionaryEntry{{Senses: []outbound.WordSense{{Definitions: defs}}}}}
 	tr := &fakeTranslator{}
@@ -115,6 +145,37 @@ func TestLookupWordLimitsTranslatedDefinitions(t *testing.T) {
 	}
 	if len(r.Senses[0].Definitions) != 20 || r.Senses[0].Definitions[maxTranslatedDefinitions].Translation != "" {
 		t.Error("all definitions must be returned, only the first few translated")
+	}
+}
+
+func TestTranslationBudgetCoversEverySenseBeforeGoingDeeper(t *testing.T) {
+	mk := func(pos string, n int) outbound.WordSense {
+		s := outbound.WordSense{PartOfSpeech: pos}
+		for i := 1; i <= n; i++ {
+			s.Definitions = append(s.Definitions, outbound.Definition{Text: fmt.Sprintf("%s %d", pos, i)})
+		}
+		return s
+	}
+	d := &fakeDict{entries: []outbound.DictionaryEntry{{Senses: []outbound.WordSense{mk("verb", 9), mk("noun", 9), mk("adj", 1), mk("adv", 9)}}}}
+	tr := &fakeTranslator{}
+
+	r, err := lookup(t, d, tr, enFa)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Budget of 5: the first definition of all four senses, then the second of the first sense.
+	want := []string{"verb 1", "noun 1", "adj 1", "adv 1", "verb 2"}
+	if fmt.Sprint(tr.gotText) != fmt.Sprint(want) {
+		t.Errorf("translated %v, want %v", tr.gotText, want)
+	}
+	for _, s := range r.Senses {
+		if s.Definitions[0].Translation == "" {
+			t.Errorf("sense %q has no translation for its first definition", s.PartOfSpeech)
+		}
+	}
+	if r.Senses[0].Definitions[1].Translation == "" || r.Senses[1].Definitions[1].Translation != "" {
+		t.Error("the fifth translation goes to the second verb definition only")
 	}
 }
 

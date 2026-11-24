@@ -62,7 +62,9 @@ go build -o vocab ./cmd/vocab        # vocab.exe on Windows
 ## Use
 
 ```bash
-vocab lookup robust                  # definitions + translations, nothing saved
+vocab lookup robust                  # definitions, examples, Persian translations; nothing saved
+vocab lookup run --all               # every definition (default: first few per part of speech)
+vocab lookup run --format json       # complete data for scripts
 vocab save robust --context "We need a robust architecture."
 vocab list
 vocab show robust

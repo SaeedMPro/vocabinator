@@ -14,7 +14,14 @@ import (
 
 const robustJSON = `[{
   "word": "robust",
-  "phonetics": [{"audio": "x.mp3"}, {"text": "/roʊˈbʌst/", "audio": "y.mp3"}],
+  "phonetics": [
+    {"audio": "no-text.mp3"},
+    {"text": "/ɹəʊˈbʌst/", "audio": "https://example.com/uk.mp3"},
+    {"text": "/ɹoʊˈbʌst/", "audio": ""},
+    {"text": "/ɹəʊˈbʌst/", "audio": "https://example.com/duplicate.mp3"}
+  ],
+  "license": {"name": "CC BY-SA 3.0", "url": "https://creativecommons.org/licenses/by-sa/3.0"},
+  "sourceUrls": ["https://en.wiktionary.org/wiki/robust"],
   "meanings": [{
     "partOfSpeech": "adjective",
     "definitions": [
@@ -53,14 +60,26 @@ func TestLookupMapsResponse(t *testing.T) {
 	}
 
 	want := []outbound.DictionaryEntry{{
-		Term:     "robust",
-		Phonetic: "/roʊˈbʌst/",
+		Term: "robust",
+		// No top-level "phonetic": the first textual pronunciation is used.
+		Phonetic: "/ɹəʊˈbʌst/",
+		Pronunciations: []outbound.Pronunciation{
+			{Text: "/ɹəʊˈbʌst/", AudioURL: "https://example.com/uk.mp3"},
+			{Text: "/ɹoʊˈbʌst/"},
+		},
+		Attribution: outbound.Attribution{
+			SourceName: "Wiktionary", SourceURL: "https://en.wiktionary.org/wiki/robust",
+			License: "CC BY-SA 3.0", LicenseURL: "https://creativecommons.org/licenses/by-sa/3.0",
+		},
 		Senses: []outbound.WordSense{{
 			PartOfSpeech: "adjective",
-			Definitions:  []string{"Strong and healthy.", "Able to withstand stress."},
-			Examples:     []string{"A robust constitution."},
-			Synonyms:     []string{"tough", "sturdy", "Strong", "resilient"},
-			Antonyms:     []string{"weak"},
+			// Each example stays with its own definition.
+			Definitions: []outbound.Definition{
+				{Text: "Strong and healthy.", Example: "A robust constitution."},
+				{Text: "Able to withstand stress."},
+			},
+			Synonyms: []string{"tough", "sturdy", "Strong", "resilient"},
+			Antonyms: []string{"weak"},
 		}},
 	}}
 	if !reflect.DeepEqual(got, want) {
@@ -100,5 +119,55 @@ func TestLookupUnsupportedLanguageMakesNoRequest(t *testing.T) {
 	})
 	if _, err := p.Lookup(context.Background(), "x", vocab.LanguageCodePersian); !errors.Is(err, outbound.ErrUnsupportedLanguage) {
 		t.Errorf("expected ErrUnsupportedLanguage, got %v", err)
+	}
+}
+
+func TestSourceName(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://en.wiktionary.org/wiki/robust": "Wiktionary",
+		"https://wiktionary.org/x":              "Wiktionary",
+		"https://example.com/robust":            "example.com",
+		"not a url":                             "",
+		"":                                      "",
+	} {
+		if got := sourceName(in); got != want {
+			t.Errorf("sourceName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestExplicitPhoneticIsKeptAndListedFirst(t *testing.T) {
+	p := newProvider(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`[{"word":"x","phonetic":"/main/","phonetics":[{"text":"/other/","audio":"a.mp3"}],"meanings":[{"partOfSpeech":"noun","definitions":[{"definition":"d"}]}]}]`))
+	})
+	got, err := p.Lookup(context.Background(), "x", vocab.LanguageCodeEnglish)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got[0].Phonetic != "/main/" || len(got[0].Pronunciations) != 2 || got[0].Pronunciations[0].Text != "/main/" {
+		t.Errorf("unexpected %+v", got[0])
+	}
+	if got[0].Attribution != (outbound.Attribution{}) {
+		t.Errorf("no attribution expected when the API gives none: %+v", got[0].Attribution)
+	}
+}
+
+func TestBestSourceURLPrefersThePageForTheWord(t *testing.T) {
+	urls := []string{"https://en.wiktionary.org/wiki/rin", "https://en.wiktionary.org/wiki/run"}
+	if got := bestSourceURL(urls, "run"); got != "https://en.wiktionary.org/wiki/run" {
+		t.Errorf("got %q", got)
+	}
+	if got := bestSourceURL(urls, "RUN"); got != "https://en.wiktionary.org/wiki/run" {
+		t.Errorf("case-insensitive match failed: %q", got)
+	}
+	multi := []string{"https://en.wiktionary.org/wiki/ice", "https://en.wiktionary.org/wiki/ice_cream"}
+	if got := bestSourceURL(multi, "ice cream"); got != multi[1] {
+		t.Errorf("multi-word term should match its underscored page, got %q", got)
+	}
+	if got := bestSourceURL(urls, "walk"); got != urls[0] {
+		t.Errorf("must fall back to the first URL, got %q", got)
+	}
+	if got := bestSourceURL(nil, "x"); got != "" {
+		t.Errorf("got %q", got)
 	}
 }

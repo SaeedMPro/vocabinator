@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
@@ -23,9 +24,21 @@ func (fakeDict) Lookup(_ context.Context, term string, _ vocab.LanguageCode) ([]
 	if strings.EqualFold(term, "zzzz") {
 		return nil, outbound.ErrNotFound
 	}
-	return []outbound.DictionaryEntry{{Term: term, Phonetic: "/x/", Senses: []outbound.WordSense{{
-		PartOfSpeech: "adjective", Definitions: []string{"Strong."}, Examples: []string{"A robust design."}, Synonyms: []string{"sturdy"},
-	}}}}, nil
+	defs := []outbound.Definition{{Text: "Strong.", Example: "A robust design."}}
+	if strings.EqualFold(term, "many") {
+		for i := 2; i <= 7; i++ {
+			defs = append(defs, outbound.Definition{Text: fmt.Sprintf("Definition %d.", i)})
+		}
+	}
+	return []outbound.DictionaryEntry{{
+		Term: term, Phonetic: "/x/",
+		Pronunciations: []outbound.Pronunciation{{Text: "/x/", AudioURL: "https://example.com/x.mp3"}, {Text: "/y/"}},
+		Attribution:    outbound.Attribution{SourceName: "Wiktionary", SourceURL: "https://en.wiktionary.org/wiki/" + term, License: "CC BY-SA 3.0"},
+		Senses: []outbound.WordSense{{
+			PartOfSpeech: "adjective", Definitions: defs,
+			Synonyms: []string{"sturdy", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10"},
+		}},
+	}}, nil
 }
 
 type fakeTranslator struct{}
@@ -112,7 +125,8 @@ func (h *harness) mustRun(args ...string) string {
 func TestLookupText(t *testing.T) {
 	out := newHarness(t).mustRun("lookup", "robust")
 
-	for _, want := range []string{"robust  /x/", "adjective", "1. Strong.", "→ fa:Strong.", "Example: A robust design.", "Synonyms: sturdy"} {
+	for _, want := range []string{"robust  /x/  /y/", "adjective", "1. Strong.", "→ fa:Strong.", "e.g. A robust design.", "Synonyms: sturdy",
+		"Source: Wiktionary (CC BY-SA 3.0) https://en.wiktionary.org/wiki/robust"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
@@ -142,6 +156,48 @@ func TestLookupJSON(t *testing.T) {
 	}
 	if got.Term != "robust" || got.Senses[0].Definitions[0].Translation != "fa:Strong." {
 		t.Errorf("unexpected JSON: %+v", got)
+	}
+}
+
+func TestLookupLimitsDefinitionsUnlessAll(t *testing.T) {
+	h := newHarness(t)
+
+	out := h.mustRun("lookup", "many")
+	if !strings.Contains(out, "3. Definition 3.") || strings.Contains(out, "4. Definition 4.") || !strings.Contains(out, "… 4 more (use --all)") {
+		t.Errorf("default output must cap definitions:\n%s", out)
+	}
+	if !strings.Contains(out, "… +2") || strings.Contains(out, "s9") {
+		t.Errorf("synonyms must be capped:\n%s", out)
+	}
+
+	all := h.mustRun("lookup", "many", "--all")
+	if !strings.Contains(all, "7. Definition 7.") || strings.Contains(all, "more (use --all)") || !strings.Contains(all, "s10") {
+		t.Errorf("--all must show everything:\n%s", all)
+	}
+
+	// JSON is always complete.
+	var got struct {
+		Senses []struct {
+			Definitions []struct{ Text, Example string }
+		}
+	}
+	if err := json.Unmarshal([]byte(h.mustRun("lookup", "many", "--format", "json")), &got); err != nil || len(got.Senses[0].Definitions) != 7 {
+		t.Errorf("JSON must include every definition: %v", err)
+	}
+}
+
+func TestLookupJSONIncludesExamplesPronunciationsAndAttribution(t *testing.T) {
+	var got struct {
+		Pronunciations []struct{ Text, AudioURL string }
+		Attribution    struct{ SourceName, License string }
+		Senses         []struct{ Definitions []struct{ Example string } }
+	}
+	if err := json.Unmarshal([]byte(newHarness(t).mustRun("lookup", "robust", "--format", "json")), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Pronunciations) != 2 || got.Pronunciations[0].AudioURL != "https://example.com/x.mp3" ||
+		got.Attribution.License != "CC BY-SA 3.0" || got.Senses[0].Definitions[0].Example != "A robust design." {
+		t.Errorf("unexpected JSON %+v", got)
 	}
 }
 

@@ -48,7 +48,8 @@ type entryDTO struct {
 	Word      string `json:"word"`
 	Phonetic  string `json:"phonetic"`
 	Phonetics []struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Audio string `json:"audio"`
 	} `json:"phonetics"`
 	Meanings []struct {
 		PartOfSpeech string `json:"partOfSpeech"`
@@ -61,6 +62,11 @@ type entryDTO struct {
 		Synonyms []string `json:"synonyms"`
 		Antonyms []string `json:"antonyms"`
 	} `json:"meanings"`
+	License *struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	} `json:"license"`
+	SourceURLs []string `json:"sourceUrls"`
 }
 
 func (p *Provider) Lookup(ctx context.Context, term string, language vocab.LanguageCode) ([]outbound.DictionaryEntry, error) {
@@ -99,13 +105,30 @@ func mapError(err error) error {
 
 func toEntry(d entryDTO) outbound.DictionaryEntry {
 	e := outbound.DictionaryEntry{Term: d.Word, Phonetic: d.Phonetic}
-	if e.Phonetic == "" {
-		for _, ph := range d.Phonetics {
-			if ph.Text != "" {
-				e.Phonetic = ph.Text
-				break
-			}
+
+	seen := map[string]bool{}
+	for _, ph := range d.Phonetics {
+		text := strings.TrimSpace(ph.Text)
+		if text == "" || seen[text] {
+			continue
 		}
+		seen[text] = true
+		e.Pronunciations = append(e.Pronunciations, outbound.Pronunciation{Text: text, AudioURL: strings.TrimSpace(ph.Audio)})
+	}
+	if e.Phonetic == "" && len(e.Pronunciations) > 0 {
+		e.Phonetic = e.Pronunciations[0].Text
+	}
+	if e.Phonetic != "" && !seen[e.Phonetic] {
+		e.Pronunciations = append([]outbound.Pronunciation{{Text: e.Phonetic}}, e.Pronunciations...)
+	}
+
+	// The API reports Wiktionary-derived content and its licence.
+	if src := bestSourceURL(d.SourceURLs, d.Word); src != "" {
+		e.Attribution.SourceURL = src
+		e.Attribution.SourceName = sourceName(src)
+	}
+	if d.License != nil {
+		e.Attribution.License, e.Attribution.LicenseURL = d.License.Name, d.License.URL
 	}
 
 	for _, m := range d.Meanings {
@@ -114,11 +137,10 @@ func toEntry(d entryDTO) outbound.DictionaryEntry {
 		ant := newSet(m.Antonyms)
 
 		for _, def := range m.Definitions {
-			if def.Definition != "" {
-				sense.Definitions = append(sense.Definitions, def.Definition)
-			}
-			if def.Example != "" {
-				sense.Examples = append(sense.Examples, def.Example)
+			if text := strings.TrimSpace(def.Definition); text != "" {
+				sense.Definitions = append(sense.Definitions, outbound.Definition{
+					Text: text, Example: strings.TrimSpace(def.Example),
+				})
 			}
 			syn.add(def.Synonyms)
 			ant.add(def.Antonyms)
@@ -130,6 +152,40 @@ func toEntry(d entryDTO) outbound.DictionaryEntry {
 		}
 	}
 	return e
+}
+
+// bestSourceURL picks the page for the word itself. The API may list several
+// pages (for "run" it also lists "rin"), so prefer the one whose last path
+// segment is the word, and fall back to the first.
+func bestSourceURL(urls []string, word string) string {
+	for _, raw := range urls {
+		u, err := url.Parse(raw)
+		if err != nil {
+			continue
+		}
+		last := u.Path[strings.LastIndex(u.Path, "/")+1:]
+		// Wiktionary writes spaces as underscores ("ice_cream").
+		if unescaped, err := url.PathUnescape(last); err == nil && strings.EqualFold(strings.ReplaceAll(unescaped, "_", " "), word) {
+			return raw
+		}
+	}
+	if len(urls) > 0 {
+		return urls[0]
+	}
+	return ""
+}
+
+// sourceName names the source from its URL: the API's content is derived from
+// Wiktionary, but only claim that when the URL says so.
+func sourceName(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	if u.Host == "wiktionary.org" || strings.HasSuffix(u.Host, ".wiktionary.org") {
+		return "Wiktionary"
+	}
+	return u.Host
 }
 
 // set is an insertion-ordered, de-duplicating string collection.

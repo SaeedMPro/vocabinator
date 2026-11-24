@@ -15,6 +15,7 @@ func newLookupCmd(env Env) *cobra.Command {
 	var langs langFlags
 	var in inputFlags
 	var formatFlag string
+	var all bool
 
 	cmd := &cobra.Command{
 		Use:   "lookup [word]",
@@ -26,6 +27,7 @@ func newLookupCmd(env Env) *cobra.Command {
 	langs.register(cmd)
 	in.register(cmd)
 	cmd.Flags().StringVar(&formatFlag, "format", "text", "output format: text or json")
+	cmd.Flags().BoolVar(&all, "all", false, "show every definition (text output shows the first few per part of speech)")
 
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		f, err := parseFormat(formatFlag)
@@ -51,7 +53,7 @@ func newLookupCmd(env Env) *cobra.Command {
 				if err != nil {
 					return friendly(err)
 				}
-				if err := renderLookup(env.Stdout, f, result); err != nil {
+				if err := renderLookup(env.Stdout, f, result, lookupOptions{all: all}); err != nil {
 					return err
 				}
 				if in.notify {

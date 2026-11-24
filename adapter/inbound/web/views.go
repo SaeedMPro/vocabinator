@@ -162,31 +162,55 @@ type errorView struct {
 // JSON contract for /api/lookup.
 
 type lookupJSON struct {
-	Term     string      `json:"term"`
-	Phonetic string      `json:"phonetic,omitempty"`
-	Senses   []senseJSON `json:"senses"`
-	Warnings []string    `json:"warnings,omitempty"`
+	Term           string              `json:"term"`
+	Phonetic       string              `json:"phonetic,omitempty"`
+	Pronunciations []pronunciationJSON `json:"pronunciations,omitempty"`
+	Senses         []senseJSON         `json:"senses"`
+	Attribution    *attributionJSON    `json:"attribution,omitempty"`
+	Warnings       []string            `json:"warnings,omitempty"`
+}
+
+type pronunciationJSON struct {
+	Text     string `json:"text"`
+	AudioURL string `json:"audioUrl,omitempty"`
+}
+
+type attributionJSON struct {
+	SourceName string `json:"sourceName,omitempty"`
+	SourceURL  string `json:"sourceUrl,omitempty"`
+	License    string `json:"license,omitempty"`
+	LicenseURL string `json:"licenseUrl,omitempty"`
 }
 
 type senseJSON struct {
 	PartOfSpeech string           `json:"partOfSpeech,omitempty"`
 	Definitions  []definitionJSON `json:"definitions"`
-	Examples     []string         `json:"examples,omitempty"`
 	Synonyms     []string         `json:"synonyms,omitempty"`
 	Antonyms     []string         `json:"antonyms,omitempty"`
 }
 
 type definitionJSON struct {
 	Text        string `json:"text"`
+	Example     string `json:"example,omitempty"`
 	Translation string `json:"translation,omitempty"`
 }
 
 func toLookupJSON(r *inbound.LookupResult) lookupJSON {
 	out := lookupJSON{Term: r.Term, Phonetic: r.Phonetic, Warnings: r.Warnings, Senses: []senseJSON{}}
+
+	for _, p := range r.Pronunciations {
+		out.Pronunciations = append(out.Pronunciations, pronunciationJSON{Text: p.Text, AudioURL: safeLink(p.AudioURL)})
+	}
+	if r.Attribution != (inbound.AttributionResult{}) {
+		out.Attribution = &attributionJSON{
+			SourceName: r.Attribution.SourceName, SourceURL: safeLink(r.Attribution.SourceURL),
+			License: r.Attribution.License, LicenseURL: safeLink(r.Attribution.LicenseURL),
+		}
+	}
 	for _, s := range r.Senses {
-		sj := senseJSON{PartOfSpeech: s.PartOfSpeech, Examples: s.Examples, Synonyms: s.Synonyms, Antonyms: s.Antonyms, Definitions: []definitionJSON{}}
+		sj := senseJSON{PartOfSpeech: s.PartOfSpeech, Synonyms: s.Synonyms, Antonyms: s.Antonyms, Definitions: []definitionJSON{}}
 		for _, d := range s.Definitions {
-			sj.Definitions = append(sj.Definitions, definitionJSON{Text: d.Text, Translation: d.Translation})
+			sj.Definitions = append(sj.Definitions, definitionJSON{Text: d.Text, Example: d.Example, Translation: d.Translation})
 		}
 		out.Senses = append(out.Senses, sj)
 	}
