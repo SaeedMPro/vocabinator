@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 )
 
 const appName = "vocabinator"
@@ -43,7 +44,10 @@ func dataDir(goos string, getenv func(string) string, home func() (string, error
 		}
 		return filepath.Join(h, "Library", "Application Support", appName), nil
 	default:
-		if dir := getenv("XDG_DATA_HOME"); filepath.IsAbs(dir) {
+		// The XDG spec requires an absolute path, i.e. one starting with "/".
+		// Checked textually (not filepath.IsAbs) so the Linux rules behave the
+		// same on any host OS, including when tests run on Windows.
+		if dir := getenv("XDG_DATA_HOME"); strings.HasPrefix(dir, "/") {
 			return filepath.Join(dir, appName), nil
 		}
 		h, err := home()
