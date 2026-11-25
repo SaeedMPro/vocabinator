@@ -1,0 +1,22 @@
+{{define "layout"}}<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} · Vocabinator</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="/">Vocabinator</a>
+    <nav aria-label="Main">
+      <a href="/"{{if eq .Nav "dashboard"}} aria-current="page"{{end}}>Dashboard</a>
+      <a href="/words"{{if eq .Nav "words"}} aria-current="page"{{end}}>Vocabulary</a>
+      <a href="/settings"{{if eq .Nav "settings"}} aria-current="page"{{end}}>Settings</a>
+    </nav>
+  </header>
+  <main id="main">{{template "content" .}}</main>
+</body>
+</html>{{end}}

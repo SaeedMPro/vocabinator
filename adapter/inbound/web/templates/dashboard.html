@@ -1,0 +1,40 @@
+{{define "content"}}{{$d := .Data}}
+<h1>Dashboard</h1>
+
+<section class="stats" aria-label="Summary">
+  <div class="stat"><span class="stat-value">{{$d.Total}}</span><span class="stat-label">words saved</span></div>
+  <div class="stat"><span class="stat-value">{{$d.TotalContexts}}</span><span class="stat-label">contexts recorded</span></div>
+  {{range $d.Pairs}}
+  <div class="stat"><span class="stat-value">{{.Count}}</span><span class="stat-label">{{.Source}} → {{.Target}}</span></div>
+  {{end}}
+</section>
+
+<section aria-labelledby="lookup-heading">
+  <h2 id="lookup-heading">Quick lookup</h2>
+  <form class="lookup" data-lookup-form data-result="lookup-result" data-saveable>
+    <label>Word
+      <input name="term" required maxlength="100" autocomplete="off" autofocus>
+    </label>
+    <label>From
+      <select name="source">{{range $d.Languages}}<option value="{{.Code}}"{{if eq .Code $d.Source}} selected{{end}}>{{.Name}}</option>{{end}}</select>
+    </label>
+    <label>To
+      <select name="target">{{range $d.Languages}}<option value="{{.Code}}"{{if eq .Code $d.Target}} selected{{end}}>{{.Name}}</option>{{end}}</select>
+    </label>
+    <button type="submit">Look up</button>
+  </form>
+  <p class="hint">Looking a word up does not save it.</p>
+  <div id="lookup-result" class="result" aria-live="polite"></div>
+</section>
+
+<section aria-labelledby="recent-heading">
+  <h2 id="recent-heading">Recently saved</h2>
+  {{if $d.Recent}}
+  <ul class="word-list">
+    {{range $d.Recent}}<li><a href="/words/{{.ID}}">{{.Term}}</a> <span class="pair">{{.Source}} → {{.Target}}</span> <span class="muted">{{formatTime .CreatedAt}}</span></li>{{end}}
+  </ul>
+  {{else}}
+  <p class="muted">Nothing saved yet. Look a word up and save it to start your collection.</p>
+  {{end}}
+</section>
+{{end}}

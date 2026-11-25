@@ -1,0 +1,44 @@
+{{define "content"}}{{$d := .Data}}
+<h1>Vocabulary</h1>
+
+<form class="filters" method="get" action="/words" role="search">
+  <label>Search
+    <input type="search" name="q" value="{{$d.Query}}" maxlength="100" autocomplete="off">
+  </label>
+  <label>From
+    <select name="source"><option value="">Any</option>{{range $d.Languages}}<option value="{{.Code}}"{{if eq .Code $d.Source}} selected{{end}}>{{.Name}}</option>{{end}}</select>
+  </label>
+  <label>To
+    <select name="target"><option value="">Any</option>{{range $d.Languages}}<option value="{{.Code}}"{{if eq .Code $d.Target}} selected{{end}}>{{.Name}}</option>{{end}}</select>
+  </label>
+  <button type="submit">Filter</button>
+</form>
+
+{{if $d.Words}}
+<table>
+  <thead><tr><th scope="col">Word</th><th scope="col">Languages</th><th scope="col">Contexts</th><th scope="col">Saved</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+  <tbody>
+  {{range $d.Words}}
+    <tr>
+      <th scope="row"><a href="/words/{{.ID}}">{{.Term}}</a></th>
+      <td>{{.Source}} → {{.Target}}</td>
+      <td>{{.Contexts}}</td>
+      <td>{{formatTime .CreatedAt}}</td>
+      <td>
+        <form method="post" action="/words/{{.ID}}/delete" data-confirm="Remove “{{.Term}}” and its contexts?">
+          <button type="submit" class="danger link">Remove</button>
+        </form>
+      </td>
+    </tr>
+  {{end}}
+  </tbody>
+</table>
+<nav class="pager" aria-label="Pagination">
+  {{if $d.PrevURL}}<a href="{{$d.PrevURL}}" rel="prev">Previous</a>{{end}}
+  <span class="muted">Page {{$d.Page}}</span>
+  {{if $d.NextURL}}<a href="{{$d.NextURL}}" rel="next">Next</a>{{end}}
+</nav>
+{{else}}
+<p class="muted">No words match.</p>
+{{end}}
+{{end}}
